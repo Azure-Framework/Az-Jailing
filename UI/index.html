@@ -3,363 +3,322 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Department of Corrections - Jail Management</title>
+  <title>DOC - Windows 11 Jailer UI</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; user-select: none; }
-    body { background: #1e1e1e; margin: 0; overflow: hidden; display: none; }
-    .desktop { position: fixed; inset: 0; }
-    .window {
-      display: none;
-      background: rgba(32,32,32,0.95);
-      border-radius: 8px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-      width: 600px; min-height: 400px;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.1);
-      position: absolute; top: 50px; left: 50px;
-      transition: all .3s ease; overflow: hidden;
-    }
-    .window.maximized { top:0; left:0; width:100%; height:100%; }
-    .title-bar {
-      background: #111; padding:8px 12px;
-      display:flex; justify-content:space-between; align-items:center;
-      cursor:move; border-bottom:1px solid rgba(255,255,255,0.2);
-      color:#eee;
-    }
-    .window-controls { display:flex; gap:4px; }
-    .window-control { width:12px; height:12px; border-radius:50%; border:none; cursor:pointer; }
-    .window-control.minimize { background:#ffbd2e; }
-    .window-control.maximize { background:#00ca56; }
-    .window-control.close    { background:#ff5f57; }
-    .window-control:hover    { filter:brightness(1.2); }
-    .content { padding:20px; height:calc(100% - 40px); overflow-y:auto; }
-    .form-section { background:rgba(45,45,45,0.8); border-radius:6px; padding:15px; margin-bottom:20px; }
-    .form-row { display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
-    .form-row label { color:#bbb; font-size:0.9em; font-weight:600; text-transform:uppercase; }
-    .form-row input, .form-row select {
-      background:#222; border:1px solid #444; color:#fff; padding:6px 10px; border-radius:4px;
-    }
-    .form-row input:focus, .form-row select:focus {
-      outline:none; border-color:#0af; box-shadow:0 0 4px rgba(0,170,255,0.5);
-    }
-    .primary-btn {
-      padding:8px 20px; background:#0af; color:#111; font-weight:600;
-      border:none; border-radius:4px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;
-    }
-    .primary-btn:hover { background:#08c; }
-
-    .error { color:#f88; margin-bottom:1em; display:none; }
-
-    /* collapsible charges */
-    .charges-container details {
-      background:#222; border:1px solid #444; border-radius:4px; margin-bottom:8px;
-    }
-    .charges-container summary {
-      padding:8px 12px; cursor:pointer; font-weight:600; color:#0af;
-    }
-    .charges-container summary::-webkit-details-marker { display:none; }
-    .charges-container .charge-list {
-      padding:8px 12px; display:grid; grid-template-columns:1fr 1fr; gap:6px;
-    }
-    .charges-container label { display:flex; align-items:center; gap:6px; color:#ddd; font-size:0.9em; }
-
-    /* NCIC table */
-    #resultsSection h3 { margin:0 0 10px; color:#0af; font-size:1em; letter-spacing:1px; }
-    #resultsTable { width:100%; border-collapse:collapse; background:#222; color:#ddd; font-size:0.9em; }
-    #resultsTable th, #resultsTable td { border:1px solid #444; padding:8px 10px; text-align:left; }
-    #resultsTable th { background:#111; text-transform:uppercase; font-weight:600; font-size:0.85em; }
-    #resultsTable tr:nth-child(even) { background:rgba(255,255,255,0.02); }
-
-    .resize-handle { position:absolute; width:16px; height:16px; right:0; bottom:0; cursor:se-resize; background:rgba(255,255,255,0.1); border-top-left-radius:4px; }
-    .desktop-icon { position:absolute; top:20px; left:20px; width:64px; text-align:center; color:#fff; font-size:12px; cursor:pointer; }
-    .desktop-icon i { font-size:32px; display:block; margin-bottom:4px; }
-    .taskbar {
-      position:fixed; bottom:0; left:0; right:0; background:rgba(40,40,40,0.95);
-      height:48px; display:flex; align-items:center; padding:0 12px; gap:8px; border-top:1px solid rgba(255,255,255,0.1);
-    }
-    .start-button {
-      width:40px; height:40px; display:flex; align-items:center; justify-content:center;
-      border-radius:4px; cursor:pointer; color:#fff; font-size:20px;
-    }
-    .start-button:hover { background:rgba(255,255,255,0.1); }
-    .minimized-apps { display:flex; gap:12px; }
-    .app-icon { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; }
-    .app-icon:hover { background:rgba(255,255,255,0.1); }
-
-    /* Start Menu */
-    #startMenu {
-      position:fixed; bottom:48px; left:12px;
-      width:200px; background:rgba(32,32,32,0.95); border:1px solid rgba(255,255,255,0.1);
-      border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.5); display:none;
-      backdrop-filter:blur(10px);
-    }
-    #startMenu ul { list-style:none; margin:0; padding:8px 0; }
-    #startMenu li {
-      padding:8px 12px; color:#ddd; cursor:pointer; display:flex; align-items:center; gap:8px;
-    }
-    #startMenu li:hover { background:rgba(255,255,255,0.1); }
-
-    .system-tray { margin-left:auto; display:flex; align-items:center; gap:12px; }
-    .system-icon { display:flex; align-items:center; gap:4px; font-size:14px; color:#fff; }
+    :root { --bg:#1f1f1f;--window-bg:rgba(255,255,255,0.04);--title-bg:rgba(255,255,255,0.06);--accent:#0078d4;--text:#e1e1e1;--border:rgba(255,255,255,0.12);--shadow:rgba(0,0,0,0.5); }
+    * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI Variable',sans-serif; user-select:none; }
+    /* Hidden by default; shown only when NUI open */
+    body { background: var(--bg); overflow: hidden; display: none; }
+    .desktop { position:fixed; inset:0; }
+    .window { position:absolute; width:640px; height:480px; background:var(--window-bg); border:1px solid var(--border); border-radius:8px; backdrop-filter:blur(20px); box-shadow:0 20px 40px var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+    .window.hidden { display:none; }
+    .window.maximized { top:0; left:0; width:100%; height:100%; border-radius:0; }
+    .title-bar { height:36px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:var(--title-bg); cursor:grab; border-top-left-radius:8px; border-top-right-radius:8px; flex-shrink:0; }
+    .title-bar.grabbing { cursor:grabbing; }
+    .title { color:var(--text); font-weight:500; }
+    .controls { display:flex; gap:8px; }
+    .controls button { background:none; border:none; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:4px; transition:background .2s; }
+    .controls button:hover { background:rgba(255,255,255,0.1); }
+    .controls .minimize i:before { content:'\f2d1'; font-family:'Font Awesome 6 Free'; font-weight:900; }
+    .controls .maximize i:before { content:'\f2d0'; font-family:'Font Awesome 6 Free'; font-weight:900; }
+    .controls .close i:before { content:'\f00d'; font-family:'Font Awesome 6 Free'; font-weight:900; }
+    .controls .close:hover { background:#e81123; color:#fff; }
+    .content { flex:1; padding:16px; overflow:auto; color:var(--text); }
+    .form-row { margin-bottom:12px; display:flex; flex-direction:column; }
+    label { margin-bottom:4px; font-size:0.9em; }
+    input, select, button { font:inherit; }
+    input, select { padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:rgba(255,255,255,0.02); color:var(--text); }
+    button.primary { margin-top:8px; padding:8px 12px; border:none; border-radius:4px; background:var(--accent); color:#fff; cursor:pointer; transition:background .2s; }
+    button.primary:hover { background:#005a9e; }
+    .error { color:#ff5f56; margin-bottom:8px; display:none; }
+    .taskbar { position:absolute; bottom:0; left:0; right:0; height:48px; background:var(--title-bg); display:flex; align-items:center; padding:0 12px; gap:8px; border-top:1px solid var(--border); flex-shrink:0; }
+    .taskbar .icon { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:6px; cursor:pointer; transition:background .2s; }
+    .taskbar .icon:hover { background:rgba(255,255,255,0.1); }
+    .taskbar .spacer { flex:1; }
+    .system-tray { display:flex; align-items:center; gap:12px; color:var(--text); }
+    .start-menu { position:absolute; bottom:48px; left:12px; width:200px; background:var(--window-bg); border:1px solid var(--border); border-radius:6px; backdrop-filter:blur(20px); box-shadow:0 8px 24px var(--shadow); display:none; }
+    .start-menu.active { display:block; }
+    .start-menu ul { list-style:none; }
+    .start-menu li { padding:8px 12px; cursor:pointer; color:var(--text); }
+    .start-menu li:hover { background:rgba(255,255,255,0.1); }
   </style>
 </head>
 <body>
   <div class="desktop">
-    <div class="desktop-icon" id="openBtn">
-      <i class="fas fa-lock"></i> Jailer
-    </div>
-    <div class="desktop-icon" id="openCaseSearchBtn" style="left:100px">
-      <i class="fas fa-book"></i> Case Search
-    </div>
-
-    <div class="window" id="mainWindow">
-      <div class="title-bar">
-        <span>Department of Corrections - Jail Management</span>
-        <div class="window-controls">
-          <button class="window-control minimize"></button>
-          <button class="window-control maximize"></button>
-          <button class="window-control close"></button>
+    <!-- Jailer -->
+    <div class="window hidden" id="jailerApp">
+      <div class="title-bar" data-win="jailerApp">
+        <div class="title">DOC - Jail Management</div>
+        <div class="controls">
+          <button class="minimize"><i></i></button>
+          <button class="maximize"><i></i></button>
+          <button class="close"><i></i></button>
         </div>
       </div>
       <div class="content">
-        <div class="form-section">
-          <div id="jailError" class="error"></div>
-          <div class="form-row">
-            <label for="targetId">Inmate ID</label>
-            <input type="number" id="targetId" />
-          </div>
-          <div class="form-row">
-            <label>Duration</label>
-            <div style="display:flex; gap:8px">
-              <input type="number" id="time" value="5" />
-              <select id="unit">
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-section charges-container" id="chargesContainer"></div>
-          <button class="primary-btn" id="submitJailBtn">Commit to Custody</button>
+        <div id="jailError" class="error"></div>
+        <div class="form-row">
+          <label for="targetId">Inmate ID</label>
+          <input type="number" id="targetId">
         </div>
+        <div class="form-row">
+          <label>Duration</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="time" value="5" style="flex:1;">
+            <select id="unit">
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </div>
+        </div>
+        <div id="chargesContainer" class="form-row"></div>
+        <button class="primary" id="submitJailBtn">Commit to Custody</button>
       </div>
-      <div class="resize-handle"></div>
     </div>
-
-    <div class="window" id="caseSearchWindow">
-      <div class="title-bar">
-        <span>NCIC Case Search</span>
-        <div class="window-controls">
-          <button class="window-control minimize"></button>
-          <button class="window-control close"></button>
+    <!-- Case Search -->
+    <div class="window hidden" id="caseSearchApp">
+      <div class="title-bar" data-win="caseSearchApp">
+        <div class="title">NCIC Case Search</div>
+        <div class="controls">
+          <button class="minimize"><i></i></button>
+          <button class="close"><i></i></button>
         </div>
       </div>
       <div class="content">
-        <div class="form-section">
-          <div id="caseError" class="error"></div>
-          <div class="form-row">
-            <label for="searchId">User ID</label>
-            <input type="number" id="searchId" placeholder="Enter target ID…" />
-          </div>
-          <button class="primary-btn" id="searchBtn">
-            <i class="fas fa-search"></i> Search
-          </button>
+        <div id="caseError" class="error"></div>
+        <div class="form-row">
+          <label for="searchId">User ID</label>
+          <input type="number" id="searchId" placeholder="Enter target ID…">
         </div>
-        <div class="form-section" id="resultsSection" style="display:none;">
-          <h3>SEARCH RESULTS</h3>
-          <table id="resultsTable">
-            <thead>
-              <tr><th>Date</th><th>Time (min)</th><th>Charges</th></tr>
-            </thead>
+        <button class="primary" id="searchBtn"><i class="fas fa-search"></i> Search</button>
+        <div id="resultsSection" class="form-row" style="display:none;">
+          <h3>Search Results</h3>
+          <table id="resultsTable" style="width:100%;border-collapse:collapse;">
+            <thead><tr><th>Date</th><th>Time (min)</th><th>Charges</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
       </div>
-      <div class="resize-handle"></div>
     </div>
+    <!-- Explorer -->
+    <div class="window hidden" id="explorerApp">
+      <div class="title-bar" data-win="explorerApp">
+        <div class="title">File Explorer</div>
+        <div class="controls">
+          <button class="minimize"><i></i></button>
+          <button class="close"><i></i></button>
+        </div>
+      </div>
+      <div class="content" style="display:flex;height:100%;">
+        <nav style="width:150px;background:rgba(255,255,255,0.02);padding:8px;color:var(--text);">
+          <ul style="list-style:none;"><li>Documents</li><li>Images</li><li>Downloads</li></ul>
+        </nav>
+        <div style="flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
+          <div class="file-item">File1.txt</div>
+          <div class="file-item">Report.pdf</div>
+          <div class="file-item">Image.png</div>
+        </div>
+      </div>
+    </div>
+    <!-- Browser -->
+    <div class="window hidden" id="browserApp">
+      <div class="title-bar" data-win="browserApp">
+        <div class="title">Browser</div>
+        <div class="controls">
+          <button class="minimize"><i></i></button>
+          <button class="close"><i></i></button>
+        </div>
+      </div>
+      <div class="content">
+        <input type="text" id="browserUrl" placeholder="https://example.com" style="width:100%;padding:6px 8px;margin-bottom:12px;border:1px solid var(--border);border-radius:4px;">
+        <iframe id="browserFrame" src="about:blank" style="width:100%;height:calc(100% - 40px);border:none;border-radius:4px;"></iframe>
+      </div>
+    </div>
+    <!-- Settings -->
+    <div class="window hidden" id="settingsApp">
+      <div class="title-bar" data-win="settingsApp">
+        <div class="title">Settings</div>
+        <div class="controls">
+          <button class="minimize"><i></i></button>
+          <button class="close"><i></i></button>
+        </div>
+      </div>
+      <div class="content">
+        <h3 style="margin-bottom:12px;color:var(--text);">Choose Wallpaper</h3>
+        <div style="display:flex;gap:8px;">
+          <div class="wall-thumb" data-wall="wall1.jpg" style="width:80px;height:60px;background:#444;cursor:pointer;border-radius:4px;"></div>
+          <div class="wall-thumb" data-wall="wall2.jpg" style="width:80px;height:60px;background:#666;cursor:pointer;border-radius:4px;"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Icons -->
+    <div class="desktop-icon" data-launch="jailerApp" style="position:absolute;top:20px;left:20px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-lock fa-2x"></i><div>Jailer</div></div>
+    <div class="desktop-icon" data-launch="caseSearchApp" style="position:absolute;top:20px;left:100px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-book fa-2x"></i><div>Case Search</div></div>
+    <div class="desktop-icon" data-launch="explorerApp" style="position:absolute;top:20px;left:180px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-folder-open fa-2x"></i><div>Explorer</div></div>
+    <div class="desktop-icon" data-launch="browserApp" style="position:absolute;top:20px;left:260px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-globe fa-2x"></i><div>Browser</div></div>
+    <div class="desktop-icon" data-launch="settingsApp" style="position:absolute;top:20px;left:340px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-cog fa-2x"></i><div>Settings</div></div>
   </div>
 
-  <div id="startMenu">
-    <ul>
-      <li id="startJailer"><i class="fas fa-lock"></i> Jailer Portal</li>
-      <li id="startCase"><i class="fas fa-book"></i> Case Search</li>
-    </ul>
-  </div>
+  <div class="start-menu" id="startMenu"><ul><li data-launch="jailerApp">Jailer</li><li data-launch="caseSearchApp">Case Search</li><li data-launch="explorerApp">Explorer</li><li data-launch="browserApp">Browser</li><li data-launch="settingsApp">Settings</li></ul></div>
 
   <div class="taskbar">
-    <div class="start-button" id="startBtn"><i class="fab fa-windows"></i></div>
-    <div class="minimized-apps" id="minimizedApps"></div>
-    <div class="system-tray">
-      <div class="system-icon"><i class="fas fa-wifi"></i></div>
-      <div class="system-icon"><i class="fas fa-volume-up"></i><span>75%</span></div>
-      <div class="system-icon"><i class="fas fa-sun"></i><span id="clock-time"></span></div>
-    </div>
+    <div class="icon" id="startBtn"><i class="fas fa-bars"></i></div>
+    <div class="icon" data-launch="jailerApp"><i class="fas fa-lock"></i></div>
+    <div class="icon" data-launch="caseSearchApp"><i class="fas fa-book"></i></div>
+    <div class="icon" data-launch="explorerApp"><i class="fas fa-folder-open"></i></div>
+    <div class="icon" data-launch="browserApp"><i class="fas fa-globe"></i></div>
+    <div class="icon" data-launch="settingsApp"><i class="fas fa-cog"></i></div>
+    <div class="spacer"></div>
+    <div class="system-tray"><i class="fas fa-wifi"></i><i class="fas fa-volume-up"></i><span id="clock-time"></span></div>
   </div>
 
   <script src="config.js"></script>
   <script>
-    const resourceName = typeof GetParentResourceName === "function" ? GetParentResourceName() : "jailer";
-    const bodyEl = document.body;
-    const mainWindow = document.getElementById("mainWindow");
-    const caseSearchWindow = document.getElementById("caseSearchWindow");
-    const openBtn = document.getElementById("openBtn");
-    const openCaseBtn = document.getElementById("openCaseSearchBtn");
-    const minimized = document.getElementById("minimizedApps");
-    const startBtn = document.getElementById("startBtn");
-    const startMenu = document.getElementById("startMenu");
-    const startJailer = document.getElementById("startJailer");
-    const startCase = document.getElementById("startCase");
-    const chargesContainer = document.getElementById("chargesContainer");
-    const resultsSection = document.getElementById("resultsSection");
-    const resultsBody = document.querySelector("#resultsTable tbody");
-    const jailErrorEl = document.getElementById("jailError");
-    const caseErrorEl = document.getElementById("caseError");
+    const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'jailer';
+    const safeSetNuiFocus = (f,c) => { if (typeof SetNuiFocus==='function') SetNuiFocus(f,c); };
+    const windows = document.querySelectorAll('.window');
 
-    function safeSetNuiFocus(f, c) { if (typeof SetNuiFocus === "function") SetNuiFocus(f, c); }
-    function openUI(win) {
-      minimized.innerHTML = "";
-      bodyEl.style.display = "block";
-      win.style.display = "block";
-      safeSetNuiFocus(true, true);
-      window.focus();
-      startMenu.style.display = "none";
-    }
-    function closeUI(win) {
-      win.style.display = "none";
-      safeSetNuiFocus(false, false);
-      if (mainWindow.style.display === "none" && caseSearchWindow.style.display === "none") {
-        bodyEl.style.display = "none";
-      }
-      fetch(`https://${resourceName}/close`, { method: "POST" });
-    }
-
-    Object.entries(chargeCategories).forEach(([cat, list]) => {
-      const det = document.createElement("details"), sum = document.createElement("summary"), grid = document.createElement("div");
-      sum.textContent = cat; grid.className = "charge-list";
-      list.forEach(ch => { const lbl = document.createElement("label"), cb = document.createElement("input"); cb.type = "checkbox"; cb.value = ch; lbl.append(cb, ch); grid.append(lbl); });
-      det.append(sum, grid);
-      chargesContainer.append(det);
-    });
-
-    openBtn.addEventListener("click", () => openUI(mainWindow));
-    openCaseBtn.addEventListener("click", () => openUI(caseSearchWindow));
-    startBtn.addEventListener("click", () => { startMenu.style.display = startMenu.style.display === "block" ? "none" : "block"; });
-    startJailer.addEventListener("click", () => openUI(mainWindow));
-    startCase.addEventListener("click", () => openUI(caseSearchWindow));
-
-    window.addEventListener('message', ({ data }) => {
-      console.log('[CEF] message:', data);
-      if (data.action === "jailError") {
-        jailErrorEl.textContent = data.message;
-        jailErrorEl.style.display = "block";
-      }
-      if (data.action === "close") {
-        closeUI(mainWindow);
-        closeUI(caseSearchWindow);
-      }
-      if (data.action === "caseRecords") {
-        caseErrorEl.style.display = "none";
-        resultsBody.innerHTML = "";
-        const recs = data.records.length ? data.records : [{date:'—',time_minutes:'—',charges:'No records'}];
-        recs.forEach(r => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`;
-          resultsBody.appendChild(tr);
-        });
-        resultsSection.style.display = "block";
-      }
-      if (data.action === "open") openUI(mainWindow);
-      if (data.action === "openCaseSearch") openUI(caseSearchWindow);
-    });
-
-    document.addEventListener("keydown", e => {
-      if (e.key === "Escape") {
-        closeUI(mainWindow);
-        closeUI(caseSearchWindow);
-        startMenu.style.display = "none";
+    // ESC to close NUI entirely
+    document.addEventListener('keyup', e => {
+      if (e.key === 'Escape') {
+        window.dispatchEvent(new MessageEvent('message', { data: { action: 'close' } }));
       }
     });
 
-    document.querySelectorAll('.window').forEach(win=>{/* drag/resize logic unchanged */});
-    document.querySelectorAll('.window-control.minimize').forEach(btn=>{/* minimize logic unchanged */});
-    document.querySelectorAll('.window-control.maximize').forEach(btn=>{/* maximize logic unchanged */});
-    document.querySelectorAll('.window-control.close').forEach(btn=>{/* close logic unchanged */});
+    // Dragging...
+    document.querySelectorAll('.title-bar').forEach(bar => {
+      const win = document.getElementById(bar.dataset.win);
+      let down=false, x0, y0;
+      bar.addEventListener('mousedown', e => { down=true; bar.classList.add('grabbing'); x0=e.clientX-win.offsetLeft; y0=e.clientY-win.offsetTop; });
+      document.addEventListener('mousemove', e => { if(down){ win.style.left = `${e.clientX-x0}px`; win.style.top = `${e.clientY-y0}px`; } });
+      document.addEventListener('mouseup', () => { down=false; bar.classList.remove('grabbing'); });
+    });
 
-    document.getElementById('submitJailBtn').addEventListener('click', () => {
-      jailErrorEl.style.display = 'none';
-      const targetId = Number(document.getElementById('targetId').value);
-      let jailTime = Number(document.getElementById('time').value);
-      const unit = document.getElementById('unit').value;
-      if (unit === 'hours') jailTime *= 60;
-      if (unit === 'days') jailTime *= 1440;
-      const charges = Array.from(chargesContainer.querySelectorAll('input:checked')).map(cb=>cb.value);
+    // Control buttons (min/max/close window only)
+    document.querySelectorAll('.controls button').forEach(btn => {
+      const win = btn.closest('.window');
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('minimize')) {
+          win.classList.add('hidden');
+        }
+        if (btn.classList.contains('maximize')) {
+          win.classList.toggle('maximized');
+        }
+        if (btn.classList.contains('close')) {
+          win.classList.add('hidden');
+        }
+      });
+    });
+
+    // Launch icons/start-menu
+    document.querySelectorAll('[data-launch]').forEach(el => el.addEventListener('click', () => {
+      const id = el.dataset.launch, w=document.getElementById(id);
+      w.classList.remove('hidden');
+      w.style.zIndex = Date.now();
+      document.body.style.display = 'block';
+      if (id==='jailerApp'||id==='caseSearchApp') safeSetNuiFocus(true,true);
+    }));
+// Toggle the Start menu
+document.getElementById('startBtn').onclick = () => {
+  document.getElementById('startMenu').classList.toggle('active');
+};
+
+// Launch apps from the Start menu and then close the menu
+document.querySelectorAll('#startMenu [data-launch]').forEach(li => {
+  li.onclick = e => {
+    e.stopPropagation();
+    document.getElementById('startMenu').classList.remove('active');
+    document.querySelector(`[data-launch="${li.dataset.launch}"]`).click();
+  };
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    // hide all windows
+    windows.forEach(w => w.classList.add('hidden'));
+    // hide the <body>
+    document.body.style.display = 'none';
+    // clear NUI focus so the mouse/keyboard returns to GTA
+    safeSetNuiFocus(false, false);
+  }
+});
+    // NUI message handler
+    window.addEventListener('message', ({data}) => {
+      if (data.action==='open') {
+        document.body.style.display='block';
+        document.querySelector('[data-launch="jailerApp"]').click();
+      }
+      if (data.action==='openCaseSearch') {
+        document.body.style.display='block';
+        document.querySelector('[data-launch="caseSearchApp"]').click();
+      }
+      if (data.action==='close') {
+        windows.forEach(w=>w.classList.add('hidden'));
+        document.body.style.display='none';
+        safeSetNuiFocus(false,false);
+      }
+      if (data.action==='jailError') {
+        const e = document.getElementById('jailError');
+        e.textContent = data.message; e.style.display='block';
+      }
+      if (data.action==='caseRecords') {
+        const tbody = document.querySelector('#resultsTable tbody');
+        tbody.innerHTML = '';
+        (data.records.length? data.records:[{date:'—',time_minutes:'—',charges:'No records'}])
+          .forEach(r=>{
+            const tr=document.createElement('tr');
+            tr.innerHTML=`<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`;
+            tbody.appendChild(tr);
+          });
+        document.getElementById('resultsSection').style.display='block';
+      }
+      // Populate charges once on open
+      if (data.action==='open' && window.chargeCategories) {
+        const c=document.getElementById('chargesContainer');
+        if (!c.hasChildNodes()) {
+          Object.entries(window.chargeCategories).forEach(([cat,list])=>{
+            const det=document.createElement('details');
+            det.innerHTML = `<summary>${cat}</summary><div>`+
+              list.map(ch=>`<label><input type="checkbox" value="${ch}"/> ${ch}</label>`).join('')+
+              `</div>`;
+            c.append(det);
+          });
+        }
+      }
+    });
+
+    // Submit and search handlers (unchanged)...
+    document.getElementById('submitJailBtn').onclick = () => {
+      document.getElementById('jailError').style.display='none';
+      const targetId=+document.getElementById('targetId').value;
+      let t=+document.getElementById('time').value;
+      const unit=document.getElementById('unit').value;
+      if(unit==='hours') t*=60; if(unit==='days') t*=1440;
+      const charges=[...document.querySelectorAll('#chargesContainer input:checked')].map(i=>i.value);
       fetch(`https://${resourceName}/submitJail`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ targetId, time: jailTime, charges })
+        body:JSON.stringify({targetId,time:t,charges})
       });
-    });
-
-    document.getElementById('searchBtn').addEventListener('click', ()=> {
-      caseErrorEl.style.display = 'none';
-      const userId = Number(document.getElementById('searchId').value);
-      if (!userId) return caseErrorEl.textContent = 'Invalid User ID', caseErrorEl.style.display='block';
+    };
+    document.getElementById('searchBtn').onclick = () => {
+      document.getElementById('caseError').style.display='none';
+      const uid=+document.getElementById('searchId').value;
+      if(!uid){
+        const e=document.getElementById('caseError'); e.textContent='Invalid User ID'; e.style.display='block';
+        return;
+      }
       fetch(`https://${resourceName}/fetchCases`, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:uid})
       });
-    });
-    document.querySelectorAll('.window').forEach(win => {
-  const titleBar = win.querySelector('.title-bar');
-  let isDragging = false, offsetX = 0, offsetY = 0;
+    };
 
-  titleBar.addEventListener('mousedown', e => {
-    isDragging = true;
-    const rect = win.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    win.style.zIndex = 1000;
-  });
-
-  document.addEventListener('mousemove', e => {
-    if (isDragging) {
-      win.style.left = `${e.clientX - offsetX}px`;
-      win.style.top = `${e.clientY - offsetY}px`;
-    }
-  });
-
-  document.addEventListener('mouseup', () => isDragging = false);
-});
-document.querySelectorAll('.window-control.minimize').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const win = btn.closest('.window');
-    win.style.display = 'none';
-
-    const icon = document.createElement('div');
-    icon.className = 'app-icon';
-    icon.innerHTML = `<i class="fas fa-window-restore"></i>`;
-    minimized.appendChild(icon);
-
-    icon.addEventListener('click', () => {
-      win.style.display = 'block';
-      minimized.removeChild(icon);
-      safeSetNuiFocus(true, true);
-    });
-  });
-});
-document.querySelectorAll('.window-control.close').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const win = btn.closest('.window');
-    win.style.display = 'none';
-    if (mainWindow.style.display === "none" && caseSearchWindow.style.display === "none") {
-      bodyEl.style.display = "none";
-      safeSetNuiFocus(false, false);
-      fetch(`https://${resourceName}/close`, { method: "POST" });
-    }
-  });
-});
-
-
-    (function tick(){ document.getElementById('clock-time').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); setTimeout(tick,1000); })();
+    // Clock, browser nav, wallpaper (unchanged)...
+    setInterval(()=>document.getElementById('clock-time').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),1000);
+    document.getElementById('browserUrl').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('browserFrame').src=e.target.value; });
+    document.querySelectorAll('.wall-thumb').forEach(el=>el.onclick=()=>{ document.body.style.background=`url('${el.dataset.wall}') center/cover no-repeat`; localStorage.setItem('bg',el.dataset.wall); });
+    window.onload=()=>{ const w=localStorage.getItem('bg'); if(w) document.body.style.background=`url('${w}') center/cover no-repeat`; };
   </script>
 </body>
 </html>
