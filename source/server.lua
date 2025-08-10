@@ -1,35 +1,65 @@
-local function getDiscordIdFromIdentifiers(ids)
-  for _, id in ipairs(ids) do
-    if id:match("^discord:%d+$") then return id:sub(9) end
+local function getDiscordIeved(playerId)
+  for _, id in ipairs(GetPlayerIdentifiers(playerId)) do
+    if id:match("^discord:") then return id:sub(9) end
   end
   return nil
 end
 
-local function getDiscordIdent(src)
-  return getDiscordIdFromIdentifiers(GetPlayerIdentifiers(src))
-end
-
-local function hasPermission(src, cb)
-  local discordId = getDiscordIdent(src)
-  if not discordId then return cb(false) end
-  local url = string.format(
-    "https://discord.com/api/guilds/%s/members/%s",
-    Config.Discord.guildId,
-    discordId
-  )
-  PerformHttpRequest(url, function(status, body)
-    if status ~= 200 then return cb(false) end
-    local data = json.decode(body)
-    for _, role in ipairs(data.roles or {}) do
-      if Config.Discord.allowedRoles[role] then return cb(true) end
+-- Grabs just the numeric part of the player’s Discord identifier
+local function getDiscordId(src)
+    for _, id in ipairs(GetPlayerIdentifiers(src)) do
+        if id:match("^discord:%d+$") then
+            return id:sub(9)
+        end
     end
-    cb(false)
-  end, "GET", nil, {
-    ["Authorization"] = "Bot " .. Config.Discord.botToken,
-    ["Content-Type"] = "application/json"
-  })
+    return nil
 end
 
+-- Async check against Discord Guild API
+local function hasPermission(src, cb)
+    local discordId = getDiscordId(src)
+    if not discordId then
+        return cb(false)
+    end
+
+    local url = string.format(
+        "https://discord.com/api/guilds/%s/members/%s",
+        Config.Discord.guildId,
+        discordId
+    )
+
+    PerformHttpRequest(url,
+        function(status, body)
+            if status ~= 200 then
+                return cb(false)
+            end
+            local data = json.decode(body)
+            for _, role in ipairs(data.roles or {}) do
+                if Config.Discord.allowedRoles[role] then
+                    return cb(true)
+                end
+            end
+            cb(false)
+        end,
+        "GET", nil,
+        {
+            ["Authorization"]   = "Bot " .. Config.Discord.botToken,
+            ["Content-Type"]    = "application/json"
+        }
+    )
+end
+
+-- Event the client calls
+RegisterServerEvent('jail:checkPermission')
+AddEventHandler('jail:checkPermission', function()
+    local src = source
+    hasPermission(src, function(allowed)
+        -- Send back true/false
+        TriggerClientEvent('jail:permissionResult', src, allowed)
+    end)
+end)
+
+-- Ensure table exists
 MySQL.ready(function()
   MySQL.query('SHOW TABLES LIKE ?', {'jail_records'}, function(res)
     if #res == 0 then
@@ -43,86 +73,86 @@ MySQL.ready(function()
           `charges` TEXT NOT NULL,
           PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-      ]], {}, function() print('[jailer] Created jail_records table') end)
+      ]], {}, function()
+        print('[jailer] Created jail_records table')
+      end)
+    else
+      print('[jailer] jail_records table exists')
     end
   end)
 end)
 
--- core functionality
-local function recordJailEvent(jailerD, inmateD, jailTime, charges)
+-- Jail request without permission check
+RegisterNetEvent('jailer:requestJail', function(targetId, jailTime, charges)
+  local src = source
+
+  -- Retrieve Discord IDs for both players
+  local jailerD = getDiscordIeved(src)
+  local inmateD = getDiscordIeved(targetId)
+  if not jailerD or not inmateD then
+    return TriggerClientEvent('jailer:jailResult', src, {
+      success = false,
+      message = 'Could not resolve Discord IDs for one of the players.'
+    })
+  end
+
+  -- (Optional) validate jailTime > 0, etc.
+
   local ts = os.date('%Y-%m-%d %H:%M:%S')
   MySQL.execute([[
-    INSERT INTO jail_records (jailer_discord, inmate_discord, time_minutes, date, charges) VALUES (?, ?, ?, ?, ?)
-  ]], { jailerD, inmateD, jailTime, ts, table.concat(charges, ', ') })
-end
+    INSERT INTO jail_records
+      (jailer_discord, inmate_discord, time_minutes, date, charges)
+    VALUES (?, ?, ?, ?, ?)
+  ]], {
+    jailerD,
+    inmateD,
+    jailTime,
+    ts,
+    table.concat(charges, ', ')
+  })
 
-local function fetchRecordsForInmate(inmateD, cb)
-  MySQL.query([[SELECT id, date, time_minutes, charges FROM jail_records WHERE inmate_discord = ? ORDER BY date DESC]], { inmateD }, cb)
-end
-
-local function fetchAllRecords(cb)
-  MySQL.query([[SELECT id, jailer_discord, inmate_discord, date, time_minutes, charges FROM jail_records ORDER BY date DESC]], {}, cb)
-end
-
-local function fetchRecordById(recordId, cb)
-  MySQL.query([[SELECT id, jailer_discord, inmate_discord, date, time_minutes, charges FROM jail_records WHERE id = ?]], { recordId }, function(res)
-    cb(res and res[1] or nil)
-  end)
-end
-
-local function deleteRecord(recordId, cb)
-  MySQL.execute([[DELETE FROM jail_records WHERE id = ?]], { recordId }, function()
-    if cb then cb(true) end
-  end)
-end
-
--- perform jail on client
-local function performJail(targetId, jailTime)
+  -- perform the actual jail on the target
   TriggerClientEvent('jailer:performJail', targetId, jailTime)
-end
 
--- manual unjail
-local function performUnjail(targetId)
-  TriggerClientEvent('jailer:performUnjail', targetId)
-end
+  -- notify the requesting client UI of success
+  TriggerClientEvent('jailer:jailResult', src, {
+    success = true
+  })
 
--- exports
-exports('hasPermission', hasPermission)
-exports('requestJail', function(src, targetId, jailTime, charges)
-  local jailerD, inmateD = getDiscordIdent(src), getDiscordIdent(targetId)
-  if not jailerD or not inmateD then return false, 'Invalid Discord IDs' end
-  recordJailEvent(jailerD, inmateD, jailTime, charges)
-  performJail(targetId, jailTime)
-  TriggerClientEvent('jailer:jailResult', src, { success = true })
-  return true
+  -- (Optional) also send a chat confirmation
+  TriggerClientEvent('chat:addMessage', src, {
+    args = {
+      '^2System',
+      ('Player %d jailed %d min'):format(targetId, jailTime)
+    }
+  })
 end)
-exports('getCaseRecords', function(src, targetId, cb)
-  local inmateD = getDiscordIdent(targetId)
-  if not inmateD then return cb(nil) end
-  fetchRecordsForInmate(inmateD, cb)
-end)
-exports('getAllJailRecords', fetchAllRecords)
-exports('getJailRecordById', fetchRecordById)
-exports('deleteJailRecord', deleteRecord)
-exports('unjailPlayer', performUnjail)
 
--- legacy events
-RegisterServerEvent('jail:checkPermission')
-AddEventHandler('jail:checkPermission', function()
+
+-- Case records without permission check
+RegisterNetEvent('jailer:requestCaseRecords', function(targetId)
   local src = source
-  hasPermission(src, function(allowed) TriggerClientEvent('jail:permissionResult', src, allowed) end)
-end)
 
-RegisterNetEvent('jailer:requestJail')
-AddEventHandler('jailer:requestJail', function(targetId, jailTime, charges)
-  local src, ok, err = source, exports['jailer']:requestJail(source, targetId, jailTime, charges)
-  if not ok then TriggerClientEvent('jailer:jailResult', src, { success = false, message = err }) end
-end)
+  targetId = tonumber(targetId)
+  if not targetId then
+    return TriggerClientEvent('chat:addMessage', src, {
+      args = {'^1System','Invalid ID.'}
+    })
+  end
 
-RegisterNetEvent('jailer:requestCaseRecords')
-AddEventHandler('jailer:requestCaseRecords', function(targetId)
-  local src = source
-  exports['jailer']:getCaseRecords(src, tonumber(targetId), function(records)
-    TriggerClientEvent('jailer:returnCaseRecords', src, records or {})
+  local inmateD = getDiscordIeved(targetId)
+  if not inmateD then
+    return TriggerClientEvent('chat:addMessage', src, {
+      args = {'^1System','Player not found.'}
+    })
+  end
+
+  MySQL.query([[
+    SELECT date, time_minutes, charges
+    FROM jail_records
+    WHERE inmate_discord = ?
+    ORDER BY date DESC
+  ]], { inmateD }, function(records)
+    TriggerClientEvent('jailer:returnCaseRecords', src, records)
   end)
 end)
