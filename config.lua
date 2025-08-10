@@ -1,11 +1,14 @@
+-- config.lua
+-- Main configuration for the jail script
+
 Config = {}
 
 -- Discord bot and guild settings
 Config.Discord = {
-    botToken    = "",    -- include the 'Bot ' prefix
-    guildId     = "1237234540561436673",
+    botToken    = "YOUR_DISCORD_BOT_TOKEN",
+    guildId     = "YOUR_DISCORD_GUILD_ID",
     allowedRoles = {
-        ["1237262220241535018"] = true,  -- Moderator
+        ["YOUR_DISCORD_POLICE_ROLE_ID"] = true,  -- Police DiscordRoleID
         ["234567890123456789"] = true,  -- Admin
         -- add more RoleIDs as needed
     }
