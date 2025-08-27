@@ -6,61 +6,570 @@
   <title>DOC - Windows 11 Jailer UI</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
-    :root { --bg:#1f1f1f;--window-bg:rgba(255,255,255,0.04);--title-bg:rgba(255,255,255,0.06);--accent:#0078d4;--text:#e1e1e1;--border:rgba(255,255,255,0.12);--shadow:rgba(0,0,0,0.5); }
-    * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI Variable',sans-serif; user-select:none; }
-    /* Hidden by default; shown only when NUI open */
-    body { background: var(--bg); overflow: hidden; display: none; }
-    .desktop { position:fixed; inset:0; }
-    .window { position:absolute; width:640px; height:480px; background:var(--window-bg); border:1px solid var(--border); border-radius:8px; backdrop-filter:blur(20px); box-shadow:0 20px 40px var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
-    .window.hidden { display:none; }
-    .window.maximized { top:0; left:0; width:100%; height:100%; border-radius:0; }
-    .title-bar { height:36px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; background:var(--title-bg); cursor:grab; border-top-left-radius:8px; border-top-right-radius:8px; flex-shrink:0; }
-    .title-bar.grabbing { cursor:grabbing; }
-    .title { color:var(--text); font-weight:500; }
-    .controls { display:flex; gap:8px; }
-    .controls button { background:none; border:none; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:4px; transition:background .2s; }
-    .controls button:hover { background:rgba(255,255,255,0.1); }
-    .controls .minimize i:before { content:'\f2d1'; font-family:'Font Awesome 6 Free'; font-weight:900; }
-    .controls .maximize i:before { content:'\f2d0'; font-family:'Font Awesome 6 Free'; font-weight:900; }
-    .controls .close i:before { content:'\f00d'; font-family:'Font Awesome 6 Free'; font-weight:900; }
-    .controls .close:hover { background:#e81123; color:#fff; }
-    .content { flex:1; padding:16px; overflow:auto; color:var(--text); }
-    .form-row { margin-bottom:12px; display:flex; flex-direction:column; }
-    label { margin-bottom:4px; font-size:0.9em; }
-    input, select, button { font:inherit; }
-    input, select { padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:rgba(255,255,255,0.02); color:var(--text); }
-    button.primary { margin-top:8px; padding:8px 12px; border:none; border-radius:4px; background:var(--accent); color:#fff; cursor:pointer; transition:background .2s; }
-    button.primary:hover { background:#005a9e; }
-    .error { color:#ff5f56; margin-bottom:8px; display:none; }
-    .taskbar { position:absolute; bottom:0; left:0; right:0; height:48px; background:var(--title-bg); display:flex; align-items:center; padding:0 12px; gap:8px; border-top:1px solid var(--border); flex-shrink:0; }
-    .taskbar .icon { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:6px; cursor:pointer; transition:background .2s; }
-    .taskbar .icon:hover { background:rgba(255,255,255,0.1); }
-    .taskbar .spacer { flex:1; }
-    .system-tray { display:flex; align-items:center; gap:12px; color:var(--text); }
-    .start-menu { position:absolute; bottom:48px; left:12px; width:200px; background:var(--window-bg); border:1px solid var(--border); border-radius:6px; backdrop-filter:blur(20px); box-shadow:0 8px 24px var(--shadow); display:none; }
-    .start-menu.active { display:block; }
-    .start-menu ul { list-style:none; }
-    .start-menu li { padding:8px 12px; cursor:pointer; color:var(--text); }
-    .start-menu li:hover { background:rgba(255,255,255,0.1); }
+    :root {
+      --bg: #1f1f1f;
+      --window-bg: rgba(255, 255, 255, 0.08);
+      --title-bg: rgba(255, 255, 255, 0.1);
+      --accent: #0078d4;
+      --text: #e1e1e1;
+      --border: rgba(255, 255, 255, 0.15);
+      --shadow: rgba(0, 0, 0, 0.5);
+      --taskbar-bg: rgba(30, 30, 30, 0.85);
+      --start-menu-bg: rgba(43, 43, 43, 0.98);
+      --hover-bg: rgba(255, 255, 255, 0.1);
+      --active-bg: rgba(255, 255, 255, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', 'Segoe UI Variable', sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('https://wallpaperaccess.com/full/2825704.gif') center/cover no-repeat;
+      overflow: hidden;
+      display: none;
+      height: 100vh;
+      color: var(--text);
+    }
+
+    .desktop {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, 80px);
+      grid-template-rows: repeat(auto-fill, 80px);
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .desktop-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 80px;
+      height: 80px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s;
+      padding: 8px;
+    }
+
+    .desktop-icon:hover {
+      background: var(--hover-bg);
+    }
+
+    .desktop-icon i {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .desktop-icon div {
+      text-align: center;
+      font-size: 12px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Window styling */
+    .window {
+      position: absolute;
+      width: 800px;
+      height: 600px;
+      background: var(--window-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 24px var(--shadow);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.2s;
+      z-index: 100;
+    }
+
+    .window.hidden {
+      display: none;
+    }
+
+    .window.maximized {
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 0;
+    }
+
+    .title-bar {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      background: var(--title-bg);
+      cursor: grab;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      flex-shrink: 0;
+      font-size: 13px;
+    }
+
+    .title-bar.grabbing {
+      cursor: grabbing;
+    }
+
+    .title {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .controls {
+      display: flex;
+      gap: 4px;
+    }
+
+    .controls button {
+      background: none;
+      border: none;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: background 0.2s;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .controls button:hover {
+      background: var(--hover-bg);
+    }
+
+    .controls .close:hover {
+      background: #e81123;
+      color: #fff;
+    }
+
+    .content {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+      color: var(--text);
+    }
+
+    /* Form elements */
+    .form-row {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      margin-bottom: 6px;
+      font-size: 0.9em;
+    }
+
+    input, select, button {
+      font: inherit;
+    }
+
+    input, select {
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: rgba(30, 30, 30, 0.6);
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      margin-top: 12px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-weight: 500;
+    }
+
+    button.primary:hover {
+      background: #0066b8;
+    }
+
+    .error {
+      color: #ff5f56;
+      margin-bottom: 12px;
+      display: none;
+      padding: 8px;
+      background: rgba(255, 95, 86, 0.1);
+      border-radius: 4px;
+      border-left: 3px solid #ff5f56;
+    }
+
+    /* Taskbar styling */
+    .taskbar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: var(--taskbar-bg);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+    }
+
+    .taskbar .icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      position: relative;
+    }
+
+    .taskbar .icon:hover {
+      background: var(--hover-bg);
+    }
+
+    .taskbar .icon.active {
+      background: var(--active-bg);
+    }
+
+    .taskbar .icon i {
+      font-size: 16px;
+    }
+
+    .taskbar .spacer {
+      flex: 1;
+    }
+
+    .system-tray {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text);
+      font-size: 12px;
+      padding-right: 8px;
+    }
+
+    .system-tray i {
+      font-size: 14px;
+    }
+
+    /* Start menu */
+    .start-menu {
+      position: absolute;
+      bottom: 52px;
+      left: 12px;
+      width: 380px;
+      height: 500px;
+      background: var(--start-menu-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 24px var(--shadow);
+      display: none;
+      z-index: 999;
+      overflow: hidden;
+    }
+
+    .start-menu.active {
+      display: flex;
+    }
+
+    .start-menu-sidebar {
+      width: 60px;
+      background: rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      gap: 16px;
+    }
+
+    .start-menu-sidebar .icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .start-menu-sidebar .icon:hover {
+      background: var(--hover-bg);
+    }
+
+    .start-menu-main {
+      flex: 1;
+      padding: 24px;
+    }
+
+    .start-menu-main h3 {
+      margin-bottom: 16px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .start-menu-apps {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .start-menu-app {
+      display: flex;
+      align-items: center;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .start-menu-app:hover {
+      background: var(--hover-bg);
+    }
+
+    .start-menu-app i {
+      margin-right: 12px;
+      font-size: 16px;
+    }
+
+    /* Browser specific styles */
+    .browser-navbar {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--title-bg);
+      gap: 8px;
+    }
+
+    .browser-nav-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .browser-nav-btn:hover {
+      background: var(--hover-bg);
+    }
+
+    .browser-url-bar {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: rgba(30, 30, 30, 0.6);
+      border-radius: 4px;
+      padding: 0 12px;
+      height: 32px;
+      gap: 8px;
+    }
+
+    .browser-url-bar i {
+      color: #8a8a8a;
+      font-size: 12px;
+    }
+
+    .browser-url-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      height: 100%;
+      padding: 0;
+    }
+
+    /* Case search table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: rgba(30, 30, 30, 0.4);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.05);
+      font-weight: 500;
+    }
+
+    tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* File explorer */
+    .explorer-sidebar {
+      width: 200px;
+      background: rgba(30, 30, 30, 0.4);
+      padding: 16px 0;
+      border-right: 1px solid var(--border);
+    }
+
+    .explorer-sidebar-item {
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .explorer-sidebar-item:hover {
+      background: var(--hover-bg);
+    }
+
+    .explorer-sidebar-item i {
+      margin-right: 12px;
+      font-size: 14px;
+    }
+
+    .explorer-content {
+      flex: 1;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+      align-content: flex-start;
+    }
+
+    .file-item {
+      padding: 12px;
+      border-radius: 4px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .file-item:hover {
+      background: var(--hover-bg);
+    }
+
+    .file-item i {
+      font-size: 24px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    /* Settings app */
+    .settings-category {
+      margin-bottom: 24px;
+    }
+
+    .settings-category h3 {
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .wallpaper-options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .wallpaper-option {
+      height: 80px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      background-size: cover;
+      background-position: center;
+    }
+
+    .wallpaper-option:hover {
+      transform: scale(1.05);
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
   </style>
 </head>
 <body>
   <div class="desktop">
-    <!-- Jailer -->
-    <div class="window hidden" id="jailerApp">
+    <!-- Desktop Icons -->
+    <div class="desktop-icon" data-launch="jailerApp">
+      <i class="fas fa-lock"></i>
+      <div>Jailer</div>
+    </div>
+    <div class="desktop-icon" data-launch="caseSearchApp">
+      <i class="fas fa-search"></i>
+      <div>Case Search</div>
+    </div>
+    <div class="desktop-icon" data-launch="explorerApp">
+      <i class="fas fa-folder"></i>
+      <div>Explorer</div>
+    </div>
+    <div class="desktop-icon" data-launch="browserApp">
+      <i class="fab fa-internet-explorer"></i>
+      <div>Internet Explorer</div>
+    </div>
+    <div class="desktop-icon" data-launch="settingsApp">
+      <i class="fas fa-cog"></i>
+      <div>Settings</div>
+    </div>
+
+    <!-- Jailer Window -->
+    <div class="window hidden" id="jailerApp" style="top: 100px; left: 100px;">
       <div class="title-bar" data-win="jailerApp">
         <div class="title">DOC - Jail Management</div>
         <div class="controls">
-          <button class="minimize"><i></i></button>
-          <button class="maximize"><i></i></button>
-          <button class="close"><i></i></button>
+          <button class="minimize"><i class="fas fa-minus"></i></button>
+          <button class="maximize"><i class="fas fa-square"></i></button>
+          <button class="close"><i class="fas fa-times"></i></button>
         </div>
       </div>
       <div class="content">
         <div id="jailError" class="error"></div>
         <div class="form-row">
           <label for="targetId">Inmate ID</label>
-          <input type="number" id="targetId">
+          <input type="number" id="targetId" placeholder="Enter inmate ID">
         </div>
         <div class="form-row">
           <label>Duration</label>
@@ -77,13 +586,15 @@
         <button class="primary" id="submitJailBtn">Commit to Custody</button>
       </div>
     </div>
-    <!-- Case Search -->
-    <div class="window hidden" id="caseSearchApp">
+
+    <!-- Case Search Window -->
+    <div class="window hidden" id="caseSearchApp" style="top: 150px; left: 150px;">
       <div class="title-bar" data-win="caseSearchApp">
         <div class="title">NCIC Case Search</div>
         <div class="controls">
-          <button class="minimize"><i></i></button>
-          <button class="close"><i></i></button>
+          <button class="minimize"><i class="fas fa-minus"></i></button>
+          <button class="maximize"><i class="fas fa-square"></i></button>
+          <button class="close"><i class="fas fa-times"></i></button>
         </div>
       </div>
       <div class="content">
@@ -95,192 +606,369 @@
         <button class="primary" id="searchBtn"><i class="fas fa-search"></i> Search</button>
         <div id="resultsSection" class="form-row" style="display:none;">
           <h3>Search Results</h3>
-          <table id="resultsTable" style="width:100%;border-collapse:collapse;">
-            <thead><tr><th>Date</th><th>Time (min)</th><th>Charges</th></tr></thead>
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time (min)</th>
+                <th>Charges</th>
+              </tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>
       </div>
     </div>
-    <!-- Explorer -->
-    <div class="window hidden" id="explorerApp">
+
+    <!-- Explorer Window -->
+    <div class="window hidden" id="explorerApp" style="top: 200px; left: 200px;">
       <div class="title-bar" data-win="explorerApp">
         <div class="title">File Explorer</div>
         <div class="controls">
-          <button class="minimize"><i></i></button>
-          <button class="close"><i></i></button>
+          <button class="minimize"><i class="fas fa-minus"></i></button>
+          <button class="maximize"><i class="fas fa-square"></i></button>
+          <button class="close"><i class="fas fa-times"></i></button>
         </div>
       </div>
-      <div class="content" style="display:flex;height:100%;">
-        <nav style="width:150px;background:rgba(255,255,255,0.02);padding:8px;color:var(--text);">
-          <ul style="list-style:none;"><li>Documents</li><li>Images</li><li>Downloads</li></ul>
-        </nav>
-        <div style="flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
-          <div class="file-item">File1.txt</div>
-          <div class="file-item">Report.pdf</div>
-          <div class="file-item">Image.png</div>
+      <div style="display:flex;height:100%;">
+        <div class="explorer-sidebar">
+          <div class="explorer-sidebar-item">
+            <i class="fas fa-desktop"></i>
+            <span>Desktop</span>
+          </div>
+          <div class="explorer-sidebar-item">
+            <i class="fas fa-documents"></i>
+            <span>Documents</span>
+          </div>
+          <div class="explorer-sidebar-item">
+            <i class="fas fa-images"></i>
+            <span>Pictures</span>
+          </div>
+          <div class="explorer-sidebar-item">
+            <i class="fas fa-download"></i>
+            <span>Downloads</span>
+          </div>
+        </div>
+        <div class="explorer-content">
+          <div class="file-item">
+            <i class="fas fa-file-alt"></i>
+            <div>Document.docx</div>
+          </div>
+          <div class="file-item">
+            <i class="fas fa-file-pdf"></i>
+            <div>Report.pdf</div>
+          </div>
+          <div class="file-item">
+            <i class="fas fa-file-image"></i>
+            <div>Image.png</div>
+          </div>
+          <div class="file-item">
+            <i class="fas fa-folder"></i>
+            <div>Cases</div>
+          </div>
+          <div class="file-item">
+            <i class="fas fa-folder"></i>
+            <div>Evidence</div>
+          </div>
         </div>
       </div>
     </div>
-    <!-- Browser -->
-    <div class="window hidden" id="browserApp">
+
+    <!-- Browser Window (Internet Explorer) -->
+    <div class="window hidden" id="browserApp" style="top: 250px; left: 250px;">
       <div class="title-bar" data-win="browserApp">
-        <div class="title">Browser</div>
+        <div class="title">Internet Explorer</div>
         <div class="controls">
-          <button class="minimize"><i></i></button>
-          <button class="close"><i></i></button>
+          <button class="minimize"><i class="fas fa-minus"></i></button>
+          <button class="maximize"><i class="fas fa-square"></i></button>
+          <button class="close"><i class="fas fa-times"></i></button>
         </div>
       </div>
-      <div class="content">
-        <input type="text" id="browserUrl" placeholder="https://example.com" style="width:100%;padding:6px 8px;margin-bottom:12px;border:1px solid var(--border);border-radius:4px;">
-        <iframe id="browserFrame" src="about:blank" style="width:100%;height:calc(100% - 40px);border:none;border-radius:4px;"></iframe>
+      <div class="browser-navbar">
+        <div class="browser-nav-btn"><i class="fas fa-arrow-left"></i></div>
+        <div class="browser-nav-btn"><i class="fas fa-arrow-right"></i></div>
+        <div class="browser-nav-btn"><i class="fas fa-redo"></i></div>
+        <div class="browser-nav-btn"><i class="fas fa-home"></i></div>
+        <div class="browser-url-bar">
+          <i class="fas fa-lock"></i>
+          <input type="text" id="browserUrl" placeholder="https://example.com" class="browser-url-input">
+        </div>
+        <div class="browser-nav-btn"><i class="fas fa-search"></i></div>
       </div>
+      <iframe id="browserFrame" src="about:blank" style="width:100%;height:calc(100% - 76px);border:none;"></iframe>
     </div>
-    <!-- Settings -->
-    <div class="window hidden" id="settingsApp">
+
+    <!-- Settings Window -->
+    <div class="window hidden" id="settingsApp" style="top: 300px; left: 300px;">
       <div class="title-bar" data-win="settingsApp">
         <div class="title">Settings</div>
         <div class="controls">
-          <button class="minimize"><i></i></button>
-          <button class="close"><i></i></button>
+          <button class="minimize"><i class="fas fa-minus"></i></button>
+          <button class="maximize"><i class="fas fa-square"></i></button>
+          <button class="close"><i class="fas fa-times"></i></button>
         </div>
       </div>
       <div class="content">
-        <h3 style="margin-bottom:12px;color:var(--text);">Choose Wallpaper</h3>
-        <div style="display:flex;gap:8px;">
-          <div class="wall-thumb" data-wall="wall1.jpg" style="width:80px;height:60px;background:#444;cursor:pointer;border-radius:4px;"></div>
-          <div class="wall-thumb" data-wall="wall2.jpg" style="width:80px;height:60px;background:#666;cursor:pointer;border-radius:4px;"></div>
+        <div class="settings-category">
+          <h3>Personalization</h3>
+          <label>Choose Wallpaper</label>
+          <div class="wallpaper-options">
+            <div class="wallpaper-option" data-wall="https://wallpaperaccess.com/full/2825704.gif" style="background-image: url('https://wallpaperaccess.com/full/2825704.gif')"></div>
+            <div class="wallpaper-option" data-wall="https://wallpaperaccess.com/full/835991.jpg" style="background-image: url('https://wallpaperaccess.com/full/835991.jpg')"></div>
+            <div class="wallpaper-option" data-wall="https://wallpaperaccess.com/full/2825714.gif" style="background-image: url('https://wallpaperaccess.com/full/2825714.gif')"></div>
+          </div>
         </div>
       </div>
     </div>
-    <!-- Icons -->
-    <div class="desktop-icon" data-launch="jailerApp" style="position:absolute;top:20px;left:20px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-lock fa-2x"></i><div>Jailer</div></div>
-    <div class="desktop-icon" data-launch="caseSearchApp" style="position:absolute;top:20px;left:100px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-book fa-2x"></i><div>Case Search</div></div>
-    <div class="desktop-icon" data-launch="explorerApp" style="position:absolute;top:20px;left:180px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-folder-open fa-2x"></i><div>Explorer</div></div>
-    <div class="desktop-icon" data-launch="browserApp" style="position:absolute;top:20px;left:260px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-globe fa-2x"></i><div>Browser</div></div>
-    <div class="desktop-icon" data-launch="settingsApp" style="position:absolute;top:20px;left:340px;cursor:pointer;text-align:center;color:var(--text);"><i class="fas fa-cog fa-2x"></i><div>Settings</div></div>
   </div>
 
-  <div class="start-menu" id="startMenu"><ul><li data-launch="jailerApp">Jailer</li><li data-launch="caseSearchApp">Case Search</li><li data-launch="explorerApp">Explorer</li><li data-launch="browserApp">Browser</li><li data-launch="settingsApp">Settings</li></ul></div>
+  <!-- Start Menu -->
+  <div class="start-menu" id="startMenu">
+    <div class="start-menu-sidebar">
+      <div class="icon"><i class="fas fa-user"></i></div>
+      <div class="icon"><i class="fas fa-cog"></i></div>
+      <div class="icon"><i class="fas fa-power-off"></i></div>
+    </div>
+    <div class="start-menu-main">
+      <h3>Applications</h3>
+      <div class="start-menu-apps">
+        <div class="start-menu-app" data-launch="jailerApp">
+          <i class="fas fa-lock"></i>
+          <span>Jailer</span>
+        </div>
+        <div class="start-menu-app" data-launch="caseSearchApp">
+          <i class="fas fa-search"></i>
+          <span>Case Search</span>
+        </div>
+        <div class="start-menu-app" data-launch="explorerApp">
+          <i class="fas fa-folder"></i>
+          <span>File Explorer</span>
+        </div>
+        <div class="start-menu-app" data-launch="browserApp">
+          <i class="fab fa-internet-explorer"></i>
+          <span>Internet Explorer</span>
+        </div>
+        <div class="start-menu-app" data-launch="settingsApp">
+          <i class="fas fa-cog"></i>
+          <span>Settings</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <!-- Taskbar -->
   <div class="taskbar">
-    <div class="icon" id="startBtn"><i class="fas fa-bars"></i></div>
-    <div class="icon" data-launch="jailerApp"><i class="fas fa-lock"></i></div>
-    <div class="icon" data-launch="caseSearchApp"><i class="fas fa-book"></i></div>
-    <div class="icon" data-launch="explorerApp"><i class="fas fa-folder-open"></i></div>
-    <div class="icon" data-launch="browserApp"><i class="fas fa-globe"></i></div>
-    <div class="icon" data-launch="settingsApp"><i class="fas fa-cog"></i></div>
+    <div class="icon" id="startBtn">
+      <i class="fab fa-windows"></i>
+    </div>
+    <div class="icon" data-launch="jailerApp">
+      <i class="fas fa-lock"></i>
+    </div>
+    <div class="icon" data-launch="caseSearchApp">
+      <i class="fas fa-search"></i>
+    </div>
+    <div class="icon" data-launch="explorerApp">
+      <i class="fas fa-folder"></i>
+    </div>
+    <div class="icon" data-launch="browserApp">
+      <i class="fab fa-internet-explorer"></i>
+    </div>
     <div class="spacer"></div>
-    <div class="system-tray"><i class="fas fa-wifi"></i><i class="fas fa-volume-up"></i><span id="clock-time"></span></div>
+    <div class="system-tray">
+      <i class="fas fa-wifi"></i>
+      <i class="fas fa-volume-up"></i>
+      <span id="clock-time">00:00</span>
+    </div>
   </div>
 
   <script src="config.js"></script>
   <script>
+    // Full NUI script (replace existing <script> block with this)
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'jailer';
-    const safeSetNuiFocus = (f,c) => { if (typeof SetNuiFocus==='function') SetNuiFocus(f,c); };
+
+    // Helper: tell the client to run the NUI "close" callback (which calls SetNuiFocus(false,false) in Lua)
+    const sendCloseToClient = () => {
+      fetch(`https://${resourceName}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}) // no payload required
+      }).catch(err => {
+        // ignore fetch errors silently (dev environment)
+        console.warn('Failed to POST close to client:', err);
+      });
+    };
+
+    // Query helpers
     const windows = document.querySelectorAll('.window');
 
-    // ESC to close NUI entirely
-    document.addEventListener('keyup', e => {
-      if (e.key === 'Escape') {
-        window.dispatchEvent(new MessageEvent('message', { data: { action: 'close' } }));
-      }
+    // -----------------------
+    // Keyboard handling (ESC)
+    // -----------------------
+    // Use keydown for reliability while NUI is focused.
+    document.addEventListener('keydown', e => {
+      const isEsc = e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27;
+      if (!isEsc) return;
+
+      // Hide start menu if open
+      document.getElementById('startMenu').classList.remove('active');
+      
+      // visually hide UI
+      windows.forEach(w => w.classList.add('hidden'));
+      document.body.style.display = 'none';
+
+      // ask client to clear focus
+      sendCloseToClient();
     });
 
-    // Dragging...
+    // -----------------------
+    // Window dragging
+    // -----------------------
     document.querySelectorAll('.title-bar').forEach(bar => {
       const win = document.getElementById(bar.dataset.win);
-      let down=false, x0, y0;
-      bar.addEventListener('mousedown', e => { down=true; bar.classList.add('grabbing'); x0=e.clientX-win.offsetLeft; y0=e.clientY-win.offsetTop; });
-      document.addEventListener('mousemove', e => { if(down){ win.style.left = `${e.clientX-x0}px`; win.style.top = `${e.clientY-y0}px`; } });
-      document.addEventListener('mouseup', () => { down=false; bar.classList.remove('grabbing'); });
+      let down = false, x0 = 0, y0 = 0;
+      bar.addEventListener('mousedown', e => {
+        down = true;
+        bar.classList.add('grabbing');
+        // use clientX/clientY because NUI runs in CEF
+        x0 = e.clientX - (win.offsetLeft || 0);
+        y0 = e.clientY - (win.offsetTop || 0);
+      });
+      document.addEventListener('mousemove', e => {
+        if (!down) return;
+        win.style.left = `${e.clientX - x0}px`;
+        win.style.top  = `${e.clientY - y0}px`;
+      });
+      document.addEventListener('mouseup', () => {
+        down = false;
+        bar.classList.remove('grabbing');
+      });
     });
 
-    // Control buttons (min/max/close window only)
+    // -----------------------
+    // Title bar controls (min/max/close)
+    // -----------------------
     document.querySelectorAll('.controls button').forEach(btn => {
       const win = btn.closest('.window');
       btn.addEventListener('click', () => {
         if (btn.classList.contains('minimize')) {
+          // hide the single window (keep NUI focus if other windows remain)
           win.classList.add('hidden');
+          // If no windows remain visible, hide body but DO NOT attempt to clear focus here
+          const anyVisible = [...document.querySelectorAll('.window')].some(w => !w.classList.contains('hidden'));
+          if (!anyVisible) document.body.style.display = 'none';
         }
         if (btn.classList.contains('maximize')) {
           win.classList.toggle('maximized');
         }
         if (btn.classList.contains('close')) {
+          // Hide this window. If no other windows visible, hide whole UI and clear focus via client.
           win.classList.add('hidden');
+          const anyVisible = [...document.querySelectorAll('.window')].some(w => !w.classList.contains('hidden'));
+          if (!anyVisible) {
+            document.body.style.display = 'none';
+            sendCloseToClient();
+          }
         }
       });
     });
 
-    // Launch icons/start-menu
-    document.querySelectorAll('[data-launch]').forEach(el => el.addEventListener('click', () => {
-      const id = el.dataset.launch, w=document.getElementById(id);
-      w.classList.remove('hidden');
-      w.style.zIndex = Date.now();
-      document.body.style.display = 'block';
-      if (id==='jailerApp'||id==='caseSearchApp') safeSetNuiFocus(true,true);
-    }));
-// Toggle the Start menu
-document.getElementById('startBtn').onclick = () => {
-  document.getElementById('startMenu').classList.toggle('active');
-};
+    // -----------------------
+    // Desktop icons / Start menu launchers
+    // -----------------------
+    document.querySelectorAll('[data-launch]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.launch;
+        const w = document.getElementById(id);
+        if (!w) return;
+        w.classList.remove('hidden');
+        w.style.zIndex = Date.now();
+        document.body.style.display = 'block';
+        // Note: NUI focus should already be managed by the client that opened the NUI.
+        // If you need the client to explicitly give focus when a user interacts with the UI,
+        // implement a client-side endpoint and call it here.
+      });
+    });
 
-// Launch apps from the Start menu and then close the menu
-document.querySelectorAll('#startMenu [data-launch]').forEach(li => {
-  li.onclick = e => {
-    e.stopPropagation();
-    document.getElementById('startMenu').classList.remove('active');
-    document.querySelector(`[data-launch="${li.dataset.launch}"]`).click();
-  };
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    // hide all windows
-    windows.forEach(w => w.classList.add('hidden'));
-    // hide the <body>
-    document.body.style.display = 'none';
-    // clear NUI focus so the mouse/keyboard returns to GTA
-    safeSetNuiFocus(false, false);
-  }
-});
-    // NUI message handler
-    window.addEventListener('message', ({data}) => {
-      if (data.action==='open') {
-        document.body.style.display='block';
-        document.querySelector('[data-launch="jailerApp"]').click();
+    // Start button toggle
+    document.getElementById('startBtn').onclick = (e) => {
+      e.stopPropagation();
+      document.getElementById('startMenu').classList.toggle('active');
+    };
+
+    // Close start menu when clicking elsewhere
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#startMenu') && !e.target.closest('#startBtn')) {
+        document.getElementById('startMenu').classList.remove('active');
       }
-      if (data.action==='openCaseSearch') {
-        document.body.style.display='block';
-        document.querySelector('[data-launch="caseSearchApp"]').click();
+    });
+
+    // Start menu launches
+    document.querySelectorAll('#startMenu [data-launch]').forEach(li => {
+      li.onclick = e => {
+        e.stopPropagation();
+        document.getElementById('startMenu').classList.remove('active');
+        document.querySelector(`[data-launch="${li.dataset.launch}"]`).click();
+      };
+    });
+
+    // -----------------------
+    // NUI message handler (client -> NUI)
+    // -----------------------
+    window.addEventListener('message', ({ data }) => {
+      if (!data || !data.action) return;
+
+      if (data.action === 'open') {
+        // make UI visible and open jailer
+        document.body.style.display = 'block';
+        // ensure the jailer window is shown and focused visually
+        const el = document.getElementById('jailerApp');
+        if (el) {
+          el.classList.remove('hidden');
+          el.style.zIndex = Date.now();
+        }
       }
-      if (data.action==='close') {
-        windows.forEach(w=>w.classList.add('hidden'));
-        document.body.style.display='none';
-        safeSetNuiFocus(false,false);
+
+      if (data.action === 'openCaseSearch') {
+        document.body.style.display = 'block';
+        const el = document.getElementById('caseSearchApp');
+        if (el) {
+          el.classList.remove('hidden');
+          el.style.zIndex = Date.now();
+        }
       }
-      if (data.action==='jailError') {
+
+      if (data.action === 'close') {
+        // client told us to close UI (visual only; client already cleared focus)
+        windows.forEach(w => w.classList.add('hidden'));
+        document.body.style.display = 'none';
+      }
+
+      if (data.action === 'jailError') {
         const e = document.getElementById('jailError');
-        e.textContent = data.message; e.style.display='block';
+        e.textContent = data.message || 'Unknown error';
+        e.style.display = 'block';
       }
-      if (data.action==='caseRecords') {
+
+      if (data.action === 'caseRecords') {
         const tbody = document.querySelector('#resultsTable tbody');
         tbody.innerHTML = '';
-        (data.records.length? data.records:[{date:'—',time_minutes:'—',charges:'No records'}])
-          .forEach(r=>{
-            const tr=document.createElement('tr');
-            tr.innerHTML=`<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`;
-            tbody.appendChild(tr);
-          });
-        document.getElementById('resultsSection').style.display='block';
+        const records = (data.records && data.records.length) ? data.records : [{ date: '—', time_minutes: '—', charges: 'No records' }];
+        records.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`;
+          tbody.appendChild(tr);
+        });
+        document.getElementById('resultsSection').style.display = 'block';
       }
-      // Populate charges once on open
-      if (data.action==='open' && window.chargeCategories) {
-        const c=document.getElementById('chargesContainer');
+
+      // Populate charges container if provided by client on open
+      if (data.action === 'open' && window.chargeCategories) {
+        const c = document.getElementById('chargesContainer');
         if (!c.hasChildNodes()) {
-          Object.entries(window.chargeCategories).forEach(([cat,list])=>{
-            const det=document.createElement('details');
-            det.innerHTML = `<summary>${cat}</summary><div>`+
-              list.map(ch=>`<label><input type="checkbox" value="${ch}"/> ${ch}</label>`).join('')+
+          Object.entries(window.chargeCategories).forEach(([cat, list]) => {
+            const det = document.createElement('details');
+            det.innerHTML = `<summary>${cat}</summary><div>` +
+              list.map(ch => `<label style="display:block;margin:6px 0;"><input type="checkbox" value="${ch}"/> ${ch}</label>`).join('') +
               `</div>`;
             c.append(det);
           });
@@ -288,37 +976,100 @@ document.addEventListener('keydown', e => {
       }
     });
 
-    // Submit and search handlers (unchanged)...
+    // -----------------------
+    // Submit / Search handlers (POST to resource endpoints)
+    // -----------------------
     document.getElementById('submitJailBtn').onclick = () => {
-      document.getElementById('jailError').style.display='none';
-      const targetId=+document.getElementById('targetId').value;
-      let t=+document.getElementById('time').value;
-      const unit=document.getElementById('unit').value;
-      if(unit==='hours') t*=60; if(unit==='days') t*=1440;
-      const charges=[...document.querySelectorAll('#chargesContainer input:checked')].map(i=>i.value);
+      document.getElementById('jailError').style.display = 'none';
+      const targetId = +document.getElementById('targetId').value;
+      let t = +document.getElementById('time').value;
+      const unit = document.getElementById('unit').value;
+      if (unit === 'hours') t *= 60;
+      if (unit === 'days') t *= 1440;
+      const charges = [...document.querySelectorAll('#chargesContainer input:checked')].map(i => i.value);
+
       fetch(`https://${resourceName}/submitJail`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({targetId,time:t,charges})
-      });
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId, time: t, charges })
+      }).catch(err => console.warn('submitJail POST failed', err));
     };
+
     document.getElementById('searchBtn').onclick = () => {
-      document.getElementById('caseError').style.display='none';
-      const uid=+document.getElementById('searchId').value;
-      if(!uid){
-        const e=document.getElementById('caseError'); e.textContent='Invalid User ID'; e.style.display='block';
+      document.getElementById('caseError').style.display = 'none';
+      const uid = +document.getElementById('searchId').value;
+      if (!uid) {
+        const e = document.getElementById('caseError');
+        e.textContent = 'Invalid User ID';
+        e.style.display = 'block';
         return;
       }
       fetch(`https://${resourceName}/fetchCases`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({userId:uid})
-      });
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: uid })
+      }).catch(err => console.warn('fetchCases POST failed', err));
     };
 
-    // Clock, browser nav, wallpaper (unchanged)...
-    setInterval(()=>document.getElementById('clock-time').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),1000);
-    document.getElementById('browserUrl').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('browserFrame').src=e.target.value; });
-    document.querySelectorAll('.wall-thumb').forEach(el=>el.onclick=()=>{ document.body.style.background=`url('${el.dataset.wall}') center/cover no-repeat`; localStorage.setItem('bg',el.dataset.wall); });
-    window.onload=()=>{ const w=localStorage.getItem('bg'); if(w) document.body.style.background=`url('${w}') center/cover no-repeat`; };
+    // -----------------------
+    // Browser functionality
+    // -----------------------
+    document.getElementById('browserUrl').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        document.getElementById('browserFrame').src = e.target.value;
+      }
+    });
+
+    // Browser navigation buttons
+    document.querySelectorAll('.browser-nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.querySelector('.fa-arrow-left')) {
+          // Back button
+          document.getElementById('browserFrame').contentWindow.history.back();
+        } else if (btn.querySelector('.fa-arrow-right')) {
+          // Forward button
+          document.getElementById('browserFrame').contentWindow.history.forward();
+        } else if (btn.querySelector('.fa-redo')) {
+          // Refresh button
+          document.getElementById('browserFrame').contentWindow.location.reload();
+        } else if (btn.querySelector('.fa-home')) {
+          // Home button
+          document.getElementById('browserFrame').src = 'about:blank';
+          document.getElementById('browserUrl').value = '';
+        } else if (btn.querySelector('.fa-search')) {
+          // Search button
+          const url = document.getElementById('browserUrl').value;
+          if (url) {
+            document.getElementById('browserFrame').src = url;
+          }
+        }
+      });
+    });
+
+    // -----------------------
+    // Wallpaper selector
+    // -----------------------
+    document.querySelectorAll('.wallpaper-option').forEach(el => {
+      el.onclick = () => {
+        document.body.style.background = `url('${el.dataset.wall}') center/cover no-repeat`;
+        localStorage.setItem('bg', el.dataset.wall);
+      };
+    });
+
+    // -----------------------
+    // Clock
+    // -----------------------
+    setInterval(() => {
+      document.getElementById('clock-time').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }, 1000);
+
+    // -----------------------
+    // On load: restore wallpaper
+    // -----------------------
+    window.onload = () => {
+      const w = localStorage.getItem('bg');
+      if (w) document.body.style.background = `url('${w}') center/cover no-repeat`;
+    };
   </script>
 </body>
 </html>
