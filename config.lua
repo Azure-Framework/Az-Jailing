@@ -1,6 +1,3 @@
--- config.lua
--- Main configuration for the jail script
-
 Config = {}
 
 -- Discord bot and guild settings
@@ -8,8 +5,8 @@ Config.Discord = {
     botToken    = "YOUR_DISCORD_BOT_TOKEN",
     guildId     = "YOUR_DISCORD_GUILD_ID",
     allowedRoles = {
-        ["YOUR_DISCORD_POLICE_ROLE_ID"] = true,  -- Police DiscordRoleID
-        ["234567890123456789"] = true,  -- Admin
+        ["YOUR_DISCORD_ALLOWED_ROLEID"] = true,  -- Moderator
+        ["YOUR_DISCORD_ALLOWED_ROLEID"] = true,  -- Admin
         -- add more RoleIDs as needed
     }
 }
@@ -52,13 +49,42 @@ Config.Clothes = {
 
 -- Jail settings
 Config.Jail = {
-  coords        = { 451.0, -987.5, 30.6 },        -- where to teleport jailed players
-  releaseCoords = { 461.1, -995.4, 24.9 },        -- where to release them
-  zoneSize      = { 6.0, 6.0, 2.0 },              -- jail boundary box
-  debugZone     = false,                          -- enable to visualize jail zone
-  fadeTime      = 500,                            -- ms for fade in/out
-  pedModel      = "mp_m_freemode_01",           -- freemode ped model check
+-- Config.Jail (replace old coords/zoneSize with these or merge)
 
+  coords        = { 1673.697, 2510.594, 45.565 },        -- teleport location inside jail (center)
+  releaseCoords = { 1956.901, 2617.651, 45.913 },       -- where to release them (bus spawn point)
+  -- BIG jail box (approx size of the GTA prison footprint)
+  zoneSize      = { 150.0, 220.0, 60.0 },         -- X, Y, Z (very large — adjust if you want)
+  fadeTime      = 500,                           -- reuse from your code
+  punchPenalty  = 300,                           -- existing
+  escapePenalty = 600,                           -- existing
+  escapeMessage = "You cannot leave the prison area!",
+  releaseMessage = "You have been released.",
+
+
+  -- NEW: toggle whether to use bus transport on release (true = bus spawn/ride, false = teleport)
+  useBus = true,                                 -- set to false to simply teleport to releaseCoords
+
+  -- cleaning/task options (reduces time)
+  cleaningSpots = {                              -- offsets relative to Jail.coords (or use absolute coords)
+    { x = 2.0,   y = 4.0,  z = 0.0 },
+    { x = -10.0, y = 20.0, z = 0.0 },
+  },
+  cleaningDurationSeconds = 20,                  -- how long a cleaning action runs
+  cleaningReductionSeconds = 60,                 -- how many seconds removed per cleaningDuration
+  cleaningCooldown = 30,                         -- cooldown between cleaning attempts (seconds)
+
+  -- bus options
+  busModel      = "pbus",                         -- vehicle model to spawn (change if you want pbus or coach)
+  busDriverModel= "s_m_m_prisguard_01",          -- ped model for driver
+  busSpawnOffset = { x = 0.0, y = 0.0, z = 0.0, h = 309.477 }, -- offset from releaseCoords to spawn the bus
+  busDestCoords  = { x = 1180.580, y = 2691.233, z = 37.826 }, -- example destination for the bus route
+  busArriveRadius = 10.0,                       -- how close before allowing F to exit
+  busDriveSpeed = 20.0,                         -- driving speed for the AI
+
+  debugZone     = true,                          -- enable to visualize jail zone
+  fadeTime      = 500,                           -- ms for fade in/out
+  pedModel      = "mp_m_freemode_01",           -- freemode ped model check
   -- map out component/prop slots for uniform application
   componentSlots = Config.Clothes.mapping.components,
   propSlots = {
