@@ -1,9 +1,3 @@
--- client.lua
--- Updated client-side for the jail system:
--- * Gardener/shovel cleaning anim reliably maintained for full duration
--- * Bus waits until player exits before driver leaves
--- * Simpler, robust bus drive task and fade flow
-
 local Config = Config or require('config')
 local lib = lib or {} -- keep existing export if present
 
@@ -767,5 +761,29 @@ RegisterCommand('stopfade', function()
     position    = 'top'
   })
 end, false)
+
+local pending = {}
+
+RegisterNUICallback('browserFetch', function(data, cb)
+  if not data or type(data.url) ~= 'string' then
+    cb({ success = false, error = 'invalid_request' })
+    return
+  end
+  local requestId = tostring(math.random(1, 2147483647))
+  pending[requestId] = cb
+  TriggerServerEvent('jailer:browserFetch_request', requestId, data.url)
+end)
+
+RegisterNetEvent('jailer:browserFetch_result')
+AddEventHandler('jailer:browserFetch_result', function(requestId, resp)
+  local cb = pending[requestId]
+  if cb then
+    cb(resp)
+    pending[requestId] = nil
+  else
+    print('[jailer] No pending callback for requestId', requestId)
+  end
+end)
+
 
 return

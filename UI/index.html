@@ -1,23 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>DOC - Windows 11 Jailer UI</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;500;600;700&display=swap');
+    
     :root {
-      --bg: #1f1f1f;
-      --window-bg: rgba(255, 255, 255, 0.08);
-      --title-bg: rgba(255, 255, 255, 0.1);
+      --bg: #202020;
+      --surface: rgba(43, 43, 43, 0.7);
+      --surface-solid: #2b2b2b;
+      --title-bg: rgba(255, 255, 255, 0.08);
       --accent: #0078d4;
-      --text: #e1e1e1;
-      --border: rgba(255, 255, 255, 0.15);
-      --shadow: rgba(0, 0, 0, 0.5);
-      --taskbar-bg: rgba(30, 30, 30, 0.85);
+      --accent-light: #4ca4e8;
+      --text: #ffffff;
+      --text-secondary: #cccccc;
+      --border: rgba(255, 255, 255, 0.1);
+      --border-light: rgba(255, 255, 255, 0.06);
+      --shadow: rgba(0, 0, 0, 0.3);
+      --taskbar-bg: rgba(32, 32, 32, 0.85);
       --start-menu-bg: rgba(43, 43, 43, 0.98);
-      --hover-bg: rgba(255, 255, 255, 0.1);
-      --active-bg: rgba(255, 255, 255, 0.15);
+      --hover-bg: rgba(255, 255, 255, 0.08);
+      --active-bg: rgba(255, 255, 255, 0.12);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --mica-bg: rgba(32, 32, 32, 0.8);
     }
 
     * {
@@ -26,6 +34,7 @@
       padding: 0;
       font-family: 'Segoe UI', 'Segoe UI Variable', sans-serif;
       user-select: none;
+      -webkit-font-smoothing: antialiased;
     }
 
     body {
@@ -55,17 +64,28 @@
       height: 80px;
       cursor: pointer;
       border-radius: 8px;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
       padding: 8px;
     }
 
     .desktop-icon:hover {
       background: var(--hover-bg);
+      transform: translateY(-2px);
+    }
+
+    .desktop-icon:active {
+      transform: translateY(0);
+      transition: transform 0.1s;
     }
 
     .desktop-icon i {
       font-size: 32px;
       margin-bottom: 8px;
+      transition: transform 0.2s cubic-bezier(0.33, 0, 0, 1);
+    }
+
+    .desktop-icon:hover i {
+      transform: scale(1.1);
     }
 
     .desktop-icon div {
@@ -79,16 +99,23 @@
       position: absolute;
       width: 800px;
       height: 600px;
-      background: var(--window-bg);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 12px 24px var(--shadow);
+      border-radius: 9px;
+      backdrop-filter: blur(20px) saturate(180%);
+      box-shadow: 0 8px 32px var(--shadow);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: all 0.2s;
+      transition: all 0.3s cubic-bezier(0.33, 0, 0, 1);
       z-index: 100;
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    .window.visible {
+      opacity: 1;
+      transform: scale(1);
     }
 
     .window.hidden {
@@ -101,6 +128,7 @@
       width: 100% !important;
       height: 100% !important;
       border-radius: 0;
+      transition: all 0.3s cubic-bezier(0.33, 0, 0, 1);
     }
 
     .title-bar {
@@ -115,10 +143,12 @@
       border-top-right-radius: 8px;
       flex-shrink: 0;
       font-size: 13px;
+      transition: background 0.2s;
     }
 
     .title-bar.grabbing {
       cursor: grabbing;
+      background: rgba(255, 255, 255, 0.12);
     }
 
     .title {
@@ -134,18 +164,26 @@
     .controls button {
       background: none;
       border: none;
-      width: 28px;
-      height: 28px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 4px;
-      transition: background 0.2s;
+      border-radius: 6px;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
       color: var(--text);
       font-size: 12px;
     }
 
     .controls button:hover {
+      background: var(--hover-bg);
+    }
+
+    .controls .minimize:hover {
+      background: var(--hover-bg);
+    }
+
+    .controls .maximize:hover {
       background: var(--hover-bg);
     }
 
@@ -163,14 +201,15 @@
 
     /* Form elements */
     .form-row {
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       display: flex;
       flex-direction: column;
     }
 
     label {
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       font-size: 0.9em;
+      color: var(--text-secondary);
     }
 
     input, select, button {
@@ -178,42 +217,51 @@
     }
 
     input, select {
-      padding: 8px 10px;
+      padding: 10px 12px;
       border: 1px solid var(--border);
-      border-radius: 4px;
-      background: rgba(30, 30, 30, 0.6);
+      border-radius: 6px;
+      background: rgba(30, 30, 30, 0.5);
       color: var(--text);
       outline: none;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
     }
 
     input:focus, select:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.3);
     }
 
     button.primary {
       margin-top: 12px;
-      padding: 10px 16px;
+      padding: 10px 20px;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       background: var(--accent);
       color: #fff;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
       font-weight: 500;
+      align-self: flex-start;
     }
 
     button.primary:hover {
-      background: #0066b8;
+      background: var(--accent-light);
+      transform: translateY(-1px);
+    }
+
+    button.primary:active {
+      transform: translateY(0);
     }
 
     .error {
       color: #ff5f56;
       margin-bottom: 12px;
       display: none;
-      padding: 8px;
+      padding: 10px 12px;
       background: rgba(255, 95, 86, 0.1);
-      border-radius: 4px;
+      border-radius: 6px;
       border-left: 3px solid #ff5f56;
+      transition: all 0.3s ease;
     }
 
     /* Taskbar styling */
@@ -227,22 +275,30 @@
       display: flex;
       align-items: center;
       padding: 0 12px;
-      gap: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      gap: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
       flex-shrink: 0;
       backdrop-filter: blur(10px);
       z-index: 1000;
+      justify-content: center;
+    }
+
+    .taskbar-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 100%;
     }
 
     .taskbar .icon {
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       display: flex;
       align-items: center;
       justify-content: center;
       border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
       position: relative;
     }
 
@@ -252,6 +308,16 @@
 
     .taskbar .icon.active {
       background: var(--active-bg);
+    }
+
+    .taskbar .icon.active::before {
+      content: '';
+      position: absolute;
+      height: 2px;
+      width: 20px;
+      background: var(--accent);
+      bottom: 6px;
+      border-radius: 10px;
     }
 
     .taskbar .icon i {
@@ -269,6 +335,21 @@
       color: var(--text);
       font-size: 12px;
       padding-right: 8px;
+      height: 100%;
+    }
+
+    .system-tray-item {
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .system-tray-item:hover {
+      background: var(--hover-bg);
     }
 
     .system-tray i {
@@ -279,21 +360,27 @@
     .start-menu {
       position: absolute;
       bottom: 52px;
-      left: 12px;
-      width: 380px;
-      height: 500px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 520px;
+      height: 600px;
       background: var(--start-menu-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      backdrop-filter: blur(20px);
-      box-shadow: 0 8px 24px var(--shadow);
+      border-radius: 14px;
+      backdrop-filter: blur(40px);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
       display: none;
       z-index: 999;
       overflow: hidden;
+      opacity: 0;
+      transform: translate(-50%, 20px) scale(0.95);
+      transition: all 0.3s cubic-bezier(0.33, 0, 0, 1);
     }
 
     .start-menu.active {
       display: flex;
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
     }
 
     .start-menu-sidebar {
@@ -334,21 +421,22 @@
 
     .start-menu-apps {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
 
     .start-menu-app {
       display: flex;
       align-items: center;
-      padding: 8px;
-      border-radius: 6px;
+      padding: 10px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
     }
 
     .start-menu-app:hover {
       background: var(--hover-bg);
+      transform: translateY(-2px);
     }
 
     .start-menu-app i {
@@ -371,7 +459,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       transition: background 0.2s;
     }
@@ -380,12 +468,17 @@
       background: var(--hover-bg);
     }
 
+    .browser-nav-btn.disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
     .browser-url-bar {
       flex: 1;
       display: flex;
       align-items: center;
-      background: rgba(30, 30, 30, 0.6);
-      border-radius: 4px;
+      background: rgba(30, 30, 30, 0.5);
+      border-radius: 6px;
       padding: 0 12px;
       height: 32px;
       gap: 8px;
@@ -406,25 +499,52 @@
       padding: 0;
     }
 
+    /* New browser content area (replaces iframe) */
+    .browser-content {
+      width: 100%;
+      height: calc(100% - 76px);
+      border: none;
+      background: rgba(255,255,255,0.02);
+      overflow: auto;
+      padding: 12px;
+      color: var(--text);
+      position: relative;
+    }
+
+    .browser-loading {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      background: rgba(0,0,0,0.6);
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+      display: none;
+      z-index: 2000;
+      color: var(--text);
+    }
+
     /* Case search table */
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 12px;
-      background: rgba(30, 30, 30, 0.4);
-      border-radius: 4px;
+      background: var(--card-bg);
+      border-radius: 8px;
       overflow: hidden;
     }
 
     th, td {
-      padding: 10px 12px;
+      padding: 12px;
       text-align: left;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border-light);
     }
 
     th {
       background: rgba(255, 255, 255, 0.05);
       font-weight: 500;
+      color: var(--text-secondary);
     }
 
     tr:hover {
@@ -436,19 +556,21 @@
       width: 200px;
       background: rgba(30, 30, 30, 0.4);
       padding: 16px 0;
-      border-right: 1px solid var(--border);
+      border-right: 1px solid var(--border-light);
     }
 
     .explorer-sidebar-item {
-      padding: 8px 16px;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
       cursor: pointer;
       transition: background 0.2s;
+      color: var(--text-secondary);
     }
 
     .explorer-sidebar-item:hover {
       background: var(--hover-bg);
+      color: var(--text);
     }
 
     .explorer-sidebar-item i {
@@ -467,14 +589,20 @@
 
     .file-item {
       padding: 12px;
-      border-radius: 4px;
+      border-radius: 8px;
       text-align: center;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
+      background: var(--card-bg);
     }
 
     .file-item:hover {
       background: var(--hover-bg);
+      transform: translateY(-2px);
+    }
+
+    .file-item:active {
+      transform: translateY(0);
     }
 
     .file-item i {
@@ -501,15 +629,129 @@
 
     .wallpaper-option {
       height: 80px;
-      border-radius: 4px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: transform 0.2s;
+      transition: all 0.2s cubic-bezier(0.33, 0, 0, 1);
       background-size: cover;
       background-position: center;
+      border: 2px solid transparent;
     }
 
     .wallpaper-option:hover {
       transform: scale(1.05);
+      border-color: var(--accent);
+    }
+
+    .wallpaper-option.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.3);
+    }
+
+    /* Notification panel */
+    .notification-panel {
+      position: absolute;
+      bottom: 52px;
+      right: 12px;
+      width: 360px;
+      height: 500px;
+      background: var(--start-menu-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      backdrop-filter: blur(40px);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+      display: none;
+      z-index: 999;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+      transition: all 0.3s cubic-bezier(0.33, 0, 0, 1);
+      flex-direction: column;
+    }
+
+    .notification-panel.active {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .notification-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-light);
+      font-weight: 600;
+    }
+
+    .notification-content {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .quick-settings {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .quick-setting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+      background: var(--card-bg);
+    }
+
+    .quick-setting:hover {
+      background: var(--hover-bg);
+    }
+
+    .quick-setting i {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .volume-slider {
+      width: 100%;
+      margin: 16px 0;
+    }
+
+    /* Calendar */
+    .calendar {
+      margin-top: 20px;
+    }
+
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+
+    .calendar-day {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .calendar-day:hover {
+      background: var(--hover-bg);
+    }
+
+    .calendar-day.today {
+      background: var(--accent);
+      color: white;
     }
 
     /* Scrollbar styling */
@@ -519,15 +761,38 @@
 
     ::-webkit-scrollbar-track {
       background: rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
     }
 
     ::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.2);
-      border-radius: 5px;
+      border-radius: 10px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Windows 11 specific animations */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Focus styles for accessibility */
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
   </style>
 </head>
@@ -685,17 +950,21 @@
         </div>
       </div>
       <div class="browser-navbar">
-        <div class="browser-nav-btn"><i class="fas fa-arrow-left"></i></div>
-        <div class="browser-nav-btn"><i class="fas fa-arrow-right"></i></div>
-        <div class="browser-nav-btn"><i class="fas fa-redo"></i></div>
-        <div class="browser-nav-btn"><i class="fas fa-home"></i></div>
+        <div id="btnBack" class="browser-nav-btn disabled" title="Back"><i class="fas fa-arrow-left"></i></div>
+        <div id="btnForward" class="browser-nav-btn disabled" title="Forward"><i class="fas fa-arrow-right"></i></div>
+        <div id="btnRefresh" class="browser-nav-btn" title="Refresh"><i class="fas fa-redo"></i></div>
+        <div id="btnHome" class="browser-nav-btn" title="Home"><i class="fas fa-home"></i></div>
         <div class="browser-url-bar">
           <i class="fas fa-lock"></i>
-          <input type="text" id="browserUrl" placeholder="https://example.com" class="browser-url-input">
+          <input type="text" id="browserUrl" placeholder="https://example.com" class="browser-url-input" spellcheck="false">
         </div>
-        <div class="browser-nav-btn"><i class="fas fa-search"></i></div>
+        <div id="btnSearch" class="browser-nav-btn" title="Go / Search"><i class="fas fa-search"></i></div>
       </div>
-      <iframe id="browserFrame" src="about:blank" style="width:100%;height:calc(100% - 76px);border:none;"></iframe>
+
+      <!-- Replaced iframe with an in-page browser rendering area -->
+      <div id="browserContent" class="browser-content" role="region" aria-label="Browser content"></div>
+      <div id="browserLoader" class="browser-loading">Loading…</div>
+      <div id="browserNotice" style="position:absolute;top:44px;left:12px;color:#cfcfcf;font-size:12px;display:none;z-index:1500;background:rgba(0,0,0,0.45);padding:6px;border-radius:6px;">Rendered via proxy</div>
     </div>
 
     <!-- Settings Window -->
@@ -756,320 +1025,407 @@
     </div>
   </div>
 
+  <!-- Notification Panel -->
+  <div class="notification-panel" id="notificationPanel">
+    <div class="notification-header">Notifications</div>
+    <div class="notification-content">
+      <div class="quick-settings">
+        <div class="quick-setting">
+          <i class="fas fa-wifi"></i>
+          <span>Wi-Fi</span>
+        </div>
+        <div class="quick-setting">
+          <i class="fas fa-bluetooth-b"></i>
+          <span>Bluetooth</span>
+        </div>
+        <div class="quick-setting">
+          <i class="fas fa-plane"></i>
+          <span>Airplane Mode</span>
+        </div>
+        <div class="quick-setting">
+          <i class="fas fa-moon"></i>
+          <span>Focus Assist</span>
+        </div>
+        <div class="quick-setting">
+          <i class="fas fa-battery-full"></i>
+          <span>Battery Saver</span>
+        </div>
+        <div class="quick-setting">
+          <i class="fas fa-map-marker-alt"></i>
+          <span>Location</span>
+        </div>
+      </div>
+      
+      <div class="volume-slider">
+        <label>Volume</label>
+        <input type="range" min="0" max="100" value="75" style="width: 100%">
+      </div>
+      
+      <div class="brightness-slider">
+        <label>Brightness</label>
+        <input type="range" min="0" max="100" value="80" style="width: 100%">
+      </div>
+      
+      <div class="calendar">
+        <div class="calendar-header">
+          <span>September 2023</span>
+          <div>
+            <button><i class="fas fa-chevron-left"></i></button>
+            <button><i class="fas fa-chevron-right"></i></button>
+          </div>
+        </div>
+        <div class="calendar-grid">
+          <!-- Calendar days would be populated here -->
+          <div class="calendar-day">S</div>
+          <div class="calendar-day">M</div>
+          <div class="calendar-day">T</div>
+          <div class="calendar-day">W</div>
+          <div class="calendar-day">T</div>
+          <div class="calendar-day">F</div>
+          <div class="calendar-day">S</div>
+          <!-- More days... -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Taskbar -->
   <div class="taskbar">
-    <div class="icon" id="startBtn">
-      <i class="fab fa-windows"></i>
+    <div class="taskbar-center">
+      <div class="icon" id="startBtn">
+        <i class="fab fa-windows"></i>
+      </div>
+      <div class="icon" data-launch="jailerApp">
+        <i class="fas fa-lock"></i>
+      </div>
+      <div class="icon" data-launch="caseSearchApp">
+        <i class="fas fa-search"></i>
+      </div>
+      <div class="icon" data-launch="explorerApp">
+        <i class="fas fa-folder"></i>
+      </div>
+      <div class="icon" data-launch="browserApp">
+        <i class="fab fa-internet-explorer"></i>
+      </div>
     </div>
-    <div class="icon" data-launch="jailerApp">
-      <i class="fas fa-lock"></i>
-    </div>
-    <div class="icon" data-launch="caseSearchApp">
-      <i class="fas fa-search"></i>
-    </div>
-    <div class="icon" data-launch="explorerApp">
-      <i class="fas fa-folder"></i>
-    </div>
-    <div class="icon" data-launch="browserApp">
-      <i class="fab fa-internet-explorer"></i>
-    </div>
-    <div class="spacer"></div>
     <div class="system-tray">
-      <i class="fas fa-wifi"></i>
-      <i class="fas fa-volume-up"></i>
-      <span id="clock-time">00:00</span>
+      <div class="system-tray-item" id="notificationBtn">
+        <i class="fas fa-comment-alt"></i>
+        <span id="clock-time">00:00</span>
+      </div>
+      <div class="system-tray-item">
+        <i class="fas fa-wifi"></i>
+      </div>
+      <div class="system-tray-item">
+        <i class="fas fa-volume-up"></i>
+      </div>
     </div>
   </div>
 
   <script src="config.js"></script>
   <script>
-    // Full NUI script (replace existing <script> block with this)
-    const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'jailer';
+    // improved resource name detection (use GetParentResourceName in NUI, fallback for dev)
+    const resourceName = (typeof GetParentResourceName === 'function' && GetParentResourceName()) ? GetParentResourceName() : (window.__DEV_RESOURCE__ || 'jailer');
 
-    // Helper: tell the client to run the NUI "close" callback (which calls SetNuiFocus(false,false) in Lua)
     const sendCloseToClient = () => {
       fetch(`https://${resourceName}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}) // no payload required
-      }).catch(err => {
-        // ignore fetch errors silently (dev environment)
-        console.warn('Failed to POST close to client:', err);
-      });
+        body: JSON.stringify({})
+      }).catch(() => {});
     };
 
-    // Query helpers
+    // UI helpers (kept from your original)
     const windows = document.querySelectorAll('.window');
 
-    // -----------------------
-    // Keyboard handling (ESC)
-    // -----------------------
-    // Use keydown for reliability while NUI is focused.
     document.addEventListener('keydown', e => {
       const isEsc = e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27;
       if (!isEsc) return;
-
-      // Hide start menu if open
       document.getElementById('startMenu').classList.remove('active');
-      
-      // visually hide UI
+      document.getElementById('notificationPanel').classList.remove('active');
       windows.forEach(w => w.classList.add('hidden'));
       document.body.style.display = 'none';
-
-      // ask client to clear focus
       sendCloseToClient();
     });
 
-    // -----------------------
-    // Window dragging
-    // -----------------------
     document.querySelectorAll('.title-bar').forEach(bar => {
       const win = document.getElementById(bar.dataset.win);
-      let down = false, x0 = 0, y0 = 0;
-      bar.addEventListener('mousedown', e => {
-        down = true;
-        bar.classList.add('grabbing');
-        // use clientX/clientY because NUI runs in CEF
-        x0 = e.clientX - (win.offsetLeft || 0);
-        y0 = e.clientY - (win.offsetTop || 0);
-      });
-      document.addEventListener('mousemove', e => {
-        if (!down) return;
-        win.style.left = `${e.clientX - x0}px`;
-        win.style.top  = `${e.clientY - y0}px`;
-      });
-      document.addEventListener('mouseup', () => {
-        down = false;
-        bar.classList.remove('grabbing');
-      });
+      let down=false, x0=0, y0=0;
+      bar.addEventListener('mousedown', e => { down=true; bar.classList.add('grabbing'); x0 = e.clientX - (win.offsetLeft||0); y0 = e.clientY - (win.offsetTop||0); });
+      document.addEventListener('mousemove', e => { if(!down) return; win.style.left = `${e.clientX - x0}px`; win.style.top = `${e.clientY - y0}px`; });
+      document.addEventListener('mouseup', () => { down=false; bar.classList.remove('grabbing'); });
     });
 
-    // -----------------------
-    // Title bar controls (min/max/close)
-    // -----------------------
     document.querySelectorAll('.controls button').forEach(btn => {
       const win = btn.closest('.window');
       btn.addEventListener('click', () => {
         if (btn.classList.contains('minimize')) {
-          // hide the single window (keep NUI focus if other windows remain)
           win.classList.add('hidden');
-          // If no windows remain visible, hide body but DO NOT attempt to clear focus here
           const anyVisible = [...document.querySelectorAll('.window')].some(w => !w.classList.contains('hidden'));
           if (!anyVisible) document.body.style.display = 'none';
         }
-        if (btn.classList.contains('maximize')) {
-          win.classList.toggle('maximized');
-        }
+        if (btn.classList.contains('maximize')) win.classList.toggle('maximized');
         if (btn.classList.contains('close')) {
-          // Hide this window. If no other windows visible, hide whole UI and clear focus via client.
           win.classList.add('hidden');
           const anyVisible = [...document.querySelectorAll('.window')].some(w => !w.classList.contains('hidden'));
-          if (!anyVisible) {
-            document.body.style.display = 'none';
-            sendCloseToClient();
-          }
+          if (!anyVisible) { document.body.style.display = 'none'; sendCloseToClient(); }
         }
       });
     });
 
-    // -----------------------
-    // Desktop icons / Start menu launchers
-    // -----------------------
     document.querySelectorAll('[data-launch]').forEach(el => {
       el.addEventListener('click', () => {
         const id = el.dataset.launch;
         const w = document.getElementById(id);
         if (!w) return;
         w.classList.remove('hidden');
+        w.classList.add('visible');
         w.style.zIndex = Date.now();
         document.body.style.display = 'block';
-        // Note: NUI focus should already be managed by the client that opened the NUI.
-        // If you need the client to explicitly give focus when a user interacts with the UI,
-        // implement a client-side endpoint and call it here.
       });
     });
 
-    // Start button toggle
-    document.getElementById('startBtn').onclick = (e) => {
-      e.stopPropagation();
+    document.getElementById('startBtn').onclick = (e) => { 
+      e.stopPropagation(); 
       document.getElementById('startMenu').classList.toggle('active');
+      document.getElementById('notificationPanel').classList.remove('active');
     };
-
-    // Close start menu when clicking elsewhere
-    document.addEventListener('click', (e) => {
+    
+    document.getElementById('notificationBtn').onclick = (e) => { 
+      e.stopPropagation(); 
+      document.getElementById('notificationPanel').classList.toggle('active');
+      document.getElementById('startMenu').classList.remove('active');
+    };
+    
+    document.addEventListener('click', (e) => { 
       if (!e.target.closest('#startMenu') && !e.target.closest('#startBtn')) {
         document.getElementById('startMenu').classList.remove('active');
       }
+      if (!e.target.closest('#notificationPanel') && !e.target.closest('#notificationBtn')) {
+        document.getElementById('notificationPanel').classList.remove('active');
+      }
+    });
+    
+    document.querySelectorAll('#startMenu [data-launch]').forEach(li => { 
+      li.onclick = e => { 
+        e.stopPropagation(); 
+        document.getElementById('startMenu').classList.remove('active'); 
+        document.querySelector(`[data-launch="${li.dataset.launch}"]`).click(); 
+      }; 
     });
 
-    // Start menu launches
-    document.querySelectorAll('#startMenu [data-launch]').forEach(li => {
-      li.onclick = e => {
-        e.stopPropagation();
-        document.getElementById('startMenu').classList.remove('active');
-        document.querySelector(`[data-launch="${li.dataset.launch}"]`).click();
-      };
-    });
-
-    // -----------------------
-    // NUI message handler (client -> NUI)
-    // -----------------------
+    // NUI message handler
     window.addEventListener('message', ({ data }) => {
       if (!data || !data.action) return;
-
       if (data.action === 'open') {
-        // make UI visible and open jailer
         document.body.style.display = 'block';
-        // ensure the jailer window is shown and focused visually
         const el = document.getElementById('jailerApp');
-        if (el) {
-          el.classList.remove('hidden');
-          el.style.zIndex = Date.now();
+        if (el) { 
+          el.classList.remove('hidden'); 
+          el.classList.add('visible');
+          el.style.zIndex = Date.now(); 
         }
       }
-
       if (data.action === 'openCaseSearch') {
         document.body.style.display = 'block';
-        const el = document.getElementById('caseSearchApp');
-        if (el) {
-          el.classList.remove('hidden');
-          el.style.zIndex = Date.now();
+        const el = document.getElementById('caseSearchApp'); 
+        if (el) { 
+          el.classList.remove('hidden'); 
+          el.classList.add('visible');
+          el.style.zIndex = Date.now(); 
         }
       }
-
-      if (data.action === 'close') {
-        // client told us to close UI (visual only; client already cleared focus)
-        windows.forEach(w => w.classList.add('hidden'));
-        document.body.style.display = 'none';
+      if (data.action === 'close') { 
+        windows.forEach(w => w.classList.add('hidden')); 
+        document.body.style.display = 'none'; 
       }
-
-      if (data.action === 'jailError') {
-        const e = document.getElementById('jailError');
-        e.textContent = data.message || 'Unknown error';
-        e.style.display = 'block';
+      if (data.action === 'jailError') { 
+        const e = document.getElementById('jailError'); 
+        e.textContent = data.message || 'Unknown error'; 
+        e.style.display = 'block'; 
       }
-
       if (data.action === 'caseRecords') {
-        const tbody = document.querySelector('#resultsTable tbody');
+        const tbody = document.querySelector('#resultsTable tbody'); 
         tbody.innerHTML = '';
         const records = (data.records && data.records.length) ? data.records : [{ date: '—', time_minutes: '—', charges: 'No records' }];
-        records.forEach(r => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`;
-          tbody.appendChild(tr);
+        records.forEach(r => { 
+          const tr = document.createElement('tr'); 
+          tr.innerHTML = `<td>${r.date}</td><td>${r.time_minutes}</td><td>${r.charges}</td>`; 
+          tbody.appendChild(tr); 
         });
         document.getElementById('resultsSection').style.display = 'block';
       }
-
-      // Populate charges container if provided by client on open
       if (data.action === 'open' && window.chargeCategories) {
         const c = document.getElementById('chargesContainer');
         if (!c.hasChildNodes()) {
           Object.entries(window.chargeCategories).forEach(([cat, list]) => {
             const det = document.createElement('details');
-            det.innerHTML = `<summary>${cat}</summary><div>` +
-              list.map(ch => `<label style="display:block;margin:6px 0;"><input type="checkbox" value="${ch}"/> ${ch}</label>`).join('') +
-              `</div>`;
+            det.innerHTML = `<summary>${cat}</summary><div>` + list.map(ch => `<label style="display:block;margin:6px 0;"><input type="checkbox" value="${ch}"/> ${ch}</label>`).join('') + `</div>`;
             c.append(det);
           });
         }
       }
     });
 
-    // -----------------------
-    // Submit / Search handlers (POST to resource endpoints)
-    // -----------------------
+    // Submit / Search handlers
     document.getElementById('submitJailBtn').onclick = () => {
       document.getElementById('jailError').style.display = 'none';
       const targetId = +document.getElementById('targetId').value;
       let t = +document.getElementById('time').value;
       const unit = document.getElementById('unit').value;
-      if (unit === 'hours') t *= 60;
-      if (unit === 'days') t *= 1440;
+      if (unit === 'hours') t *= 60; if (unit === 'days') t *= 1440;
       const charges = [...document.querySelectorAll('#chargesContainer input:checked')].map(i => i.value);
-
-      fetch(`https://${resourceName}/submitJail`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetId, time: t, charges })
-      }).catch(err => console.warn('submitJail POST failed', err));
+      fetch(`https://${resourceName}/submitJail`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ targetId, time: t, charges }) }).catch(err => console.warn('submitJail POST failed', err));
     };
 
     document.getElementById('searchBtn').onclick = () => {
       document.getElementById('caseError').style.display = 'none';
       const uid = +document.getElementById('searchId').value;
-      if (!uid) {
-        const e = document.getElementById('caseError');
-        e.textContent = 'Invalid User ID';
-        e.style.display = 'block';
+      if (!uid) { const e = document.getElementById('caseError'); e.textContent = 'Invalid User ID'; e.style.display = 'block'; return; }
+      fetch(`https://${resourceName}/fetchCases`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: uid }) }).catch(err => console.warn('fetchCases POST failed', err));
+    };
+
+    // Browser functionality (no iframe)
+    const browserContent = document.getElementById('browserContent');
+    const browserLoader = document.getElementById('browserLoader');
+    const browserUrlInput = document.getElementById('browserUrl');
+    const btnBack = document.getElementById('btnBack');
+    const btnForward = document.getElementById('btnForward');
+    const btnRefresh = document.getElementById('btnRefresh');
+    const btnHome = document.getElementById('btnHome');
+    const btnSearch = document.getElementById('btnSearch');
+    const browserNotice = document.getElementById('browserNotice');
+
+    const historyStack = [];
+    let historyPos = -1;
+    let currentUrl = '';
+
+    function sanitizeHTML(raw) {
+      if (!raw) return '';
+      raw = raw.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+      raw = raw.replace(/href\s*=\s*["']\s*javascript:[^"']*["']/gi, 'href="#"');
+      raw = raw.replace(/\son\w+\s*=\s*(['"])[\s\S]*?\1/gi, '');
+      raw = raw.replace(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, '');
+      return raw;
+    }
+
+    function setLoading(on) { browserLoader.style.display = on ? 'block' : 'none'; }
+    function updateNavButtons() { btnBack.classList.toggle('disabled', historyPos <= 0); btnForward.classList.toggle('disabled', historyPos >= historyStack.length - 1 || historyPos === -1); }
+
+    async function fetchPage(url) {
+      setLoading(true);
+      try {
+        const res = await fetch(`https://${resourceName}/browserFetch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+        const data = await res.json().catch(() => null);
+        setLoading(false);
+        return data;
+      } catch (err) {
+        setLoading(false);
+        console.warn('browserFetch failed', err);
+        return { success:false, error: 'Network error' };
+      }
+    }
+
+    async function navigateTo(rawUrl, addToHistory = true) {
+      if (!rawUrl) return;
+      let url = rawUrl.trim();
+      const looksLikeUrl = /^[a-zA-Z]+:\/\//.test(url) || /^[\w\.\-]+\.[a-z]{2,6}/i.test(url);
+      if (!looksLikeUrl) {
+        url = `https://duckduckgo.com/?q=${encodeURIComponent(url)}`;
+      } else if (!/^[a-zA-Z]+:\/\//.test(url)) {
+        url = 'https://' + url;
+      }
+
+      browserUrlInput.value = url;
+      browserNotice.style.display = 'none';
+
+      const data = await fetchPage(url);
+
+      if (!data || !data.success) {
+        const err = data && data.error ? data.error : 'Unknown error';
+        browserContent.innerHTML = `<div style="padding:12px;color:var(--text)"><strong>Failed to load page.</strong><div style="margin-top:8px;color:#ccc;">${err}</div></div>`;
+        currentUrl = url;
+        if (addToHistory) { historyStack.splice(historyPos + 1); historyStack.push(url); historyPos++; }
+        updateNavButtons();
         return;
       }
-      fetch(`https://${resourceName}/fetchCases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: uid })
-      }).catch(err => console.warn('fetchCases POST failed', err));
-    };
 
-    // -----------------------
-    // Browser functionality
-    // -----------------------
-    document.getElementById('browserUrl').addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        document.getElementById('browserFrame').src = e.target.value;
+      if (data.fromProxy) {
+        browserNotice.style.display = 'block';
+        browserNotice.textContent = 'Rendered via proxy';
+      } else {
+        browserNotice.style.display = 'none';
       }
-    });
 
-    // Browser navigation buttons
-    document.querySelectorAll('.browser-nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.querySelector('.fa-arrow-left')) {
-          // Back button
-          document.getElementById('browserFrame').contentWindow.history.back();
-        } else if (btn.querySelector('.fa-arrow-right')) {
-          // Forward button
-          document.getElementById('browserFrame').contentWindow.history.forward();
-        } else if (btn.querySelector('.fa-redo')) {
-          // Refresh button
-          document.getElementById('browserFrame').contentWindow.location.reload();
-        } else if (btn.querySelector('.fa-home')) {
-          // Home button
-          document.getElementById('browserFrame').src = 'about:blank';
-          document.getElementById('browserUrl').value = '';
-        } else if (btn.querySelector('.fa-search')) {
-          // Search button
-          const url = document.getElementById('browserUrl').value;
-          if (url) {
-            document.getElementById('browserFrame').src = url;
-          }
-        }
-      });
-    });
+      const sanitized = sanitizeHTML(data.html || '');
+      browserContent.innerHTML = sanitized || '<div style="padding:12px;color:var(--text)">No content</div>';
 
-    // -----------------------
-    // Wallpaper selector
-    // -----------------------
-    document.querySelectorAll('.wallpaper-option').forEach(el => {
-      el.onclick = () => {
-        document.body.style.background = `url('${el.dataset.wall}') center/cover no-repeat`;
-        localStorage.setItem('bg', el.dataset.wall);
-      };
-    });
+      if (data.title) {
+        const titleEl = document.querySelector('#browserApp .title');
+        if (titleEl) titleEl.textContent = `Internet Explorer — ${data.title}`;
+      }
 
-    // -----------------------
-    // Clock
-    // -----------------------
-    setInterval(() => {
-      document.getElementById('clock-time').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      currentUrl = data.url || url;
+      if (addToHistory) { historyStack.splice(historyPos + 1); historyStack.push(currentUrl); historyPos++; }
+      browserUrlInput.value = currentUrl;
+      updateNavButtons();
+      interceptLinksInContent();
+    }
+
+    function interceptLinksInContent() {
+      try { browserContent.removeEventListener('click', contentClickHandler); } catch(e) {}
+      browserContent.addEventListener('click', contentClickHandler);
+    }
+
+    function contentClickHandler(e) {
+      const a = e.target.closest('a');
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (/^\s*javascript:/i.test(href)) { e.preventDefault(); return; }
+      e.preventDefault();
+      try {
+        let newUrl;
+        if (/^[a-zA-Z]+:\/\//.test(href)) newUrl = href;
+        else { const base = currentUrl || browserUrlInput.value || 'https://'; newUrl = new URL(href, base).toString(); }
+        navigateTo(newUrl, true);
+      } catch (err) { console.warn('Failed resolving link', err); }
+    }
+
+    // nav handlers
+    btnBack.addEventListener('click', () => { if (historyPos <= 0) return; historyPos--; navigateTo(historyStack[historyPos], false); updateNavButtons(); });
+    btnForward.addEventListener('click', () => { if (historyPos >= historyStack.length - 1) return; historyPos++; navigateTo(historyStack[historyPos], false); updateNavButtons(); });
+    btnRefresh.addEventListener('click', () => { if (!currentUrl) return; navigateTo(currentUrl, false); });
+    btnHome.addEventListener('click', () => { browserContent.innerHTML = '<div style="padding:12px;color:var(--text)">Home</div>'; browserUrlInput.value = ''; currentUrl = ''; historyStack.splice(historyPos + 1); historyStack.push('about:blank'); historyPos++; updateNavButtons(); });
+    btnSearch.addEventListener('click', () => { const v = browserUrlInput.value.trim(); if (v) navigateTo(v, true); });
+    browserUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') navigateTo(e.target.value, true); });
+
+    // wallpaper & clock & onload restore (same as before)
+    document.querySelectorAll('.wallpaper-option').forEach(el => { 
+      el.onclick = () => { 
+        document.body.style.background = `url('${el.dataset.wall}') center/cover no-repeat`; 
+        localStorage.setItem('bg', el.dataset.wall); 
+        document.querySelectorAll('.wallpaper-option').forEach(opt => opt.classList.remove('active'));
+        el.classList.add('active');
+      }; 
+    });
+    
+    setInterval(() => { 
+      document.getElementById('clock-time').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); 
     }, 1000);
-
-    // -----------------------
-    // On load: restore wallpaper
-    // -----------------------
-    window.onload = () => {
-      const w = localStorage.getItem('bg');
-      if (w) document.body.style.background = `url('${w}') center/cover no-repeat`;
+    
+    window.onload = () => { 
+      const w = localStorage.getItem('bg'); 
+      if (w) {
+        document.body.style.background = `url('${w}') center/cover no-repeat`;
+        document.querySelectorAll('.wallpaper-option').forEach(opt => {
+          if (opt.dataset.wall === w) opt.classList.add('active');
+        });
+      }
     };
+
+    function cleanupContentHandlers() { try { browserContent.removeEventListener('click', contentClickHandler); } catch(e) {} }
+    window._nui_browser = { navigateTo, historyStack, getCurrentUrl: () => currentUrl };
+    window.addEventListener('unload', cleanupContentHandlers);
   </script>
 </body>
 </html>

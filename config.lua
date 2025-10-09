@@ -2,13 +2,25 @@ Config = {}
 
 -- Discord bot and guild settings
 Config.Discord = {
-    botToken    = "YOUR_DISCORD_BOT_TOKEN",
-    guildId     = "YOUR_DISCORD_GUILD_ID",
+    botToken    = "",    -- include the 'Bot ' prefix
+    guildId     = "1378183960215032000",
     allowedRoles = {
-        ["YOUR_DISCORD_ALLOWED_ROLEID"] = true,  -- Moderator
-        ["YOUR_DISCORD_ALLOWED_ROLEID"] = true,  -- Admin
+        ["1383518537628389406"] = true,  -- Moderator
+        ["234567890123456789"] = true,  -- Admin
         -- add more RoleIDs as needed
     }
+}
+-- If true, bypass domain checks (DANGEROUS: do NOT enable on public servers)
+Config.ALLOW_ALL = false
+
+-- Allowed domains. Examples:
+-- "example.com"  -> allows example.com and sub.example.com
+-- "*.example.net" -> also allows sub.example.net (matching logic below treats both similarly)
+Config.ALLOWED_DOMAINS = {
+  "duckduckgo.com",
+  "example.com",
+  "azurewebsites.xyz",
+  "127.0.0.1"
 }
 
 

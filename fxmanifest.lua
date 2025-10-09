@@ -3,8 +3,8 @@ game 'gta5'
 lua54 'yes'
 
 author 'Azure(TheStoicBear)'
-description 'Az-Jailer'
-version '1.5'
+description 'AZ-FW Jailer resource'
+version '1.4.0'
 
 -- Shared scripts
 shared_scripts {
@@ -30,11 +30,4 @@ ui_page 'UI/index.html'
 files {
     'UI/index.html',
     'UI/config.js'
-}
-
--- ensure these resources are present before starting this resource
-dependencies {
-    'ox_lib',
-    'oxmysql',
-    'Az-Framework'
 }
