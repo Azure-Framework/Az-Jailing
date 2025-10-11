@@ -1,3 +1,9 @@
+-- client.lua
+-- Updated client-side for the jail system:
+-- * Gardener/shovel cleaning anim reliably maintained for full duration
+-- * Bus waits until player exits before driver leaves
+-- * Simpler, robust bus drive task and fade flow
+
 local Config = Config or require('config')
 local lib = lib or {} -- keep existing export if present
 
@@ -260,7 +266,7 @@ local function playGardenerFallbackAnimOnce(ped, durationMs)
   return nil, nil
 end
 
--- Start cleaning (gardener scenario + fallback that reliably runs for exactly 1.5s)
+-- Start cleaning (gardener scenario) -- robust animation + lib.progressBar
 local function StartCleaningTask()
   if not jailed or isCleaning then return end
   if (GetGameTimer() / 1000) - cleaningLastUsed < (Config.Jail.cleaningCooldown or 30) then
@@ -274,72 +280,130 @@ local function StartCleaningTask()
   -- unarm to reduce interruptions
   SetCurrentPedWeapon(ped, GetHashKey("weapon_unarmed"), true)
 
-  -- attempt scenario first
-  TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
   lib.notify({ title = "Cleaning", description = "You start pulling weeds with a shovel...", type = 'inform', position = 'top' })
 
-  -- force duration to 1.5s (explicit)
-  local dur = 1.5
-  local durMs = math.max(1, math.floor(dur * 1000)) -- 1500 ms
+  -- We'll manage the anims ourselves and run a monitor while the progress bar runs
+  local cleaningActive = true
+  local fallbackDict, fallbackAnim
 
-  local start = GetGameTimer()
-  local endTime = start + durMs
+  -- Prepare fallback anim dicts (same list as before)
+  local dicts = {
+    "amb@world_human_gardener_plant@male@base",
+    "amb@world_human_gardener_plant@female@base",
+    "amb@world_human_gardener_plant@base"
+  }
+  local anims = { "work_base", "base", "idle_a" }
 
-  -- small delay to allow scenario to begin
-  Citizen.Wait(700)
-  local usingScenario = false
-  if IsPedUsingScenario then usingScenario = IsPedUsingScenario(ped) end
+  -- Try to start scenario first
+  TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
+  Citizen.Wait(250)
+  local usingScenario = (IsPedUsingScenario and IsPedUsingScenario(ped)) or false
 
-  local fallbackDict, fallbackAnim = nil, nil
+  -- If scenario didn't start, find a fallback anim and request its dict
   if not usingScenario then
-    fallbackDict, fallbackAnim = playGardenerFallbackAnimOnce(ped, durMs)
-  end
-
-  -- keep anim/scenario alive for the remainder of duration
-  while isCleaning and jailed and GetGameTimer() < endTime do
-    Citizen.Wait(50) -- frequent checks for short total duration
-
-    -- if scenario is available but not active, try restarting it
-    if IsPedUsingScenario then
-      if not IsPedUsingScenario(ped) then
-        TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
-        Citizen.Wait(100)
-        if IsPedUsingScenario and IsPedUsingScenario(ped) then
-          usingScenario = true
-          fallbackDict, fallbackAnim = nil, nil
-        end
+    for _, d in ipairs(dicts) do
+      RequestAnimDict(d)
+      local to = GetGameTimer() + 1500
+      while not HasAnimDictLoaded(d) and GetGameTimer() < to do Citizen.Wait(10) end
+      if HasAnimDictLoaded(d) then
+        fallbackDict = d
+        break
       end
     end
-
-    -- if using fallback and it stopped early, reapply only for remaining time
-    if (not usingScenario) and fallbackDict and fallbackAnim then
-      if not IsEntityPlayingAnim(ped, fallbackDict, fallbackAnim, 3) then
-        local remaining = endTime - GetGameTimer()
-        if remaining > 50 then
-          TaskPlayAnim(ped, fallbackDict, fallbackAnim, 8.0, -8.0, remaining, 1, 0.0, false, false, false)
-        end
-      end
+    if fallbackDict then
+      fallbackAnim = anims[1] or anims[2] or anims[3]
+      -- play an indefinite looping anim; we'll clear it when done
+      TaskPlayAnim(ped, fallbackDict, fallbackAnim, 8.0, -8.0, -1, 1, 0.0, false, false, false)
     end
-
-    -- keep player unarmed during the short cleaning to avoid interruptions
-    SetCurrentPedWeapon(ped, GetHashKey("weapon_unarmed"), true)
   end
 
-  -- finalize: clear tasks (use immediate clear to ensure anim/scenario ends)
+  -- Animation monitor - keeps scenario/anim alive while cleaningActive
+  Citizen.CreateThread(function()
+    while cleaningActive and jailed and isCleaning do
+      -- If scenario support exists, ensure it stays active
+      if IsPedUsingScenario and IsPedUsingScenario(ped) then
+        -- scenario active, nothing to do
+      else
+        -- ensure scenario is started where possible
+        if not usingScenario then
+          -- try re-starting the scenario briefly
+          TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
+          Citizen.Wait(100)
+          if IsPedUsingScenario and IsPedUsingScenario(ped) then
+            usingScenario = true
+            -- clear fallback anim (TaskStartScenarioInPlace should override it)
+          else
+            -- ensure fallback anim still playing
+            if fallbackDict and fallbackAnim then
+              if not IsEntityPlayingAnim(ped, fallbackDict, fallbackAnim, 3) then
+                TaskPlayAnim(ped, fallbackDict, fallbackAnim, 8.0, -8.0, -1, 1, 0.0, false, false, false)
+              end
+            end
+          end
+        end
+      end
+
+      -- keep player unarmed to avoid interruptions
+      SetCurrentPedWeapon(ped, GetHashKey("weapon_unarmed"), true)
+
+      Citizen.Wait(250)
+    end
+  end)
+
+  -- Run the progress bar WITHOUT giving it an anim/scenario to avoid conflicting control.
+  local ok = false
+  local success, perr = pcall(function()
+    ok = lib.progressBar({
+      duration = 1500, -- 1.5s
+      label = "Pulling weeds...",
+      useWhileDead = false,
+      canCancel = true,
+      disable = {
+        car = true,
+        combat = true,
+        move = true,
+        sprint = true,
+        mouse = true
+      },
+      -- intentionally NOT passing anim/scenario so we manage anims ourselves
+    })
+  end)
+
+  -- stop the monitor and cleanup animations/tasks
+  cleaningActive = false
+  Citizen.Wait(80) -- give monitor a tick to finish
   ClearPedTasksImmediately(ped)
+
+  -- finalize flags / cooldown
   isCleaning = false
   cleaningLastUsed = GetGameTimer() / 1000
 
-  -- apply reduction and notify
-  local reduction = Config.Jail.cleaningReductionSeconds or 60
-  timeLeft = math.max(0, timeLeft - reduction)
-  lib.notify({
-    id = 'clean_reduce',
-    title = 'Cleaning Complete',
-    description = string.format('You reduced %d seconds from your sentence.', reduction),
-    type = 'success',
-    position = 'top'
-  })
+  if not success then
+    lib.notify({ title = "Cleaning", description = "An error occurred while trying to clean.", type = 'error', position = 'top' })
+    return
+  end
+
+  if ok then
+    -- completed -> reduce between 5 and 10 seconds (random)
+    local reduction = math.random(5, 10)
+    timeLeft = math.max(0, timeLeft - reduction)
+    lib.notify({
+      id = 'clean_reduce',
+      title = 'Cleaning Complete',
+      description = string.format('You reduced %d seconds from your sentence.', reduction),
+      type = 'success',
+      position = 'top'
+    })
+  else
+    -- cancelled by player
+    lib.notify({
+      id = 'clean_cancel',
+      title = 'Cleaning Cancelled',
+      description = 'You stopped pulling weeds.',
+      type = 'warning',
+      position = 'top'
+    })
+  end
 end
 
 -- create cleaning markers
@@ -762,6 +826,7 @@ RegisterCommand('stopfade', function()
   })
 end, false)
 
+-- client.lua
 local pending = {}
 
 RegisterNUICallback('browserFetch', function(data, cb)

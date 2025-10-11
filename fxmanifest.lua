@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Azure(TheStoicBear)'
 description 'AZ-FW Jailer resource'
-version '1.4.0'
+version '1.0.0'
 
 -- Shared scripts
 shared_scripts {

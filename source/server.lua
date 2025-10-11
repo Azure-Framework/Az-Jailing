@@ -1,3 +1,7 @@
+-- server.lua
+-- Full server-side for the jail system: permission checks (Discord role), jail records, request handling, case records.
+-- Make sure Config.Discord.guildId and Config.Discord.botToken and Config.Discord.allowedRoles exist in your config.
+
 local Config = Config or require('config')
 local json = json
 
@@ -181,6 +185,10 @@ AddEventHandler('jailer:requestCaseRecords', function(targetId)
     TriggerClientEvent('jailer:returnCaseRecords', src, records)
   end)
 end)
+-- server.lua
+-- Usage: handles browser fetch requests from client NUI via bladder client callback flow
+-- It will attempt direct PerformHttpRequest; on network failure (status==0) it will optionally
+-- call an external render proxy (PUPPETEER) if configured.
 
 -- Simple local config here; move to config.lua if you prefer.
 local Config = {

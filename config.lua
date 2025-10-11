@@ -2,7 +2,7 @@ Config = {}
 
 -- Discord bot and guild settings
 Config.Discord = {
-    botToken    = "",    -- include the 'Bot ' prefix
+    botToken    = "YOUR_DISCORD_BOTTOKEN",
     guildId     = "1378183960215032000",
     allowedRoles = {
         ["1383518537628389406"] = true,  -- Moderator
