@@ -72,7 +72,18 @@ Config.Jail = {
   escapePenalty = 600,                           -- existing
   escapeMessage = "You cannot leave the prison area!",
   releaseMessage = "You have been released.",
-
+  jailerStations = {
+      {
+          coords = vector3(1775.12, 2484.45, 45.74), -- CHANGE THESE TO YOUR DESK
+          radius = 2.0,
+          label  = "Open Jail UI"
+      },
+      {
+          coords = vector3(1779.30, 2484.85, 45.74),
+          radius = 2.0,
+          label  = "Open Jail UI"
+      }
+  },
 
   -- NEW: toggle whether to use bus transport on release (true = bus spawn/ride, false = teleport)
   useBus = true,                                 -- set to false to simply teleport to releaseCoords
@@ -163,3 +174,4 @@ Config.Timer = {
 }
 
 return Config
+
