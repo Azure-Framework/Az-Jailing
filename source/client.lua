@@ -850,5 +850,48 @@ AddEventHandler('jailer:browserFetch_result', function(requestId, resp)
   end
 end)
 
+-- -------------------------------------------------
+-- Jailer UI: E to open at configured xyzh stations
+-- -------------------------------------------------
+CreateThread(function()
+    local stations = Config.Jail.jailerStations or {}
+
+    if #stations == 0 then
+        return
+    end
+
+    while true do
+        local sleep = 500
+        local ped   = PlayerPedId()
+        local pPos  = GetEntityCoords(ped)
+
+        for _, station in ipairs(stations) do
+            local pos = station.coords
+                or (station.x and vector3(station.x, station.y, station.z))
+            if pos then
+                local dist = #(pPos - pos)
+                local radius = station.radius or 2.0
+
+                if dist < 10.0 then
+                    sleep = 0
+                    if dist < radius then
+                        DrawText3D(pos.x, pos.y, pos.z + 1.0,
+                            string.format("[E] %s", station.label or "Open Jail UI"))
+
+                        if IsControlJustReleased(0, 38) then -- E
+                            -- Same permission check you use for /jailer
+                            TriggerServerEvent('jail:checkPermission')
+                        end
+                    end
+                end
+            end
+        end
+
+        Wait(sleep)
+    end
+end)
+
+
 
 return
+
