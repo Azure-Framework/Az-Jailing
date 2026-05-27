@@ -1,15 +1,16 @@
--- client.lua
--- Updated client-side for the jail system:
--- * Gardener/shovel cleaning anim reliably maintained for full duration
--- * Bus waits until player exits before driver leaves
--- * Simpler, robust bus drive task and fade flow
+
+
+
+
+
 
 local Config = Config or require('config')
-local lib = lib or {} -- keep existing export if present
+local lib = lib or {} 
 
--- State
+
 local jailed        = false
 local timeLeft      = 0
+local activeCaseId  = nil
 local jailZone      = nil
 local jailCoords    = Config.Jail.coords
 local releaseCoords = Config.Jail.releaseCoords
@@ -19,11 +20,11 @@ local componentSlots = Config.Clothes and Config.Clothes.mapping and Config.Clot
 local propSlots      = Config.Jail.propSlots or {}
 local oldClothes     = {}
 
--- cleaning state
+
 local cleaningLastUsed = 0
 local isCleaning = false
 
--- Utility formatting
+
 local function formatDuration(sec)
   local days  = math.floor(sec / 86400); sec = sec % 86400
   local hours = math.floor(sec / 3600);  sec = sec % 3600
@@ -42,7 +43,7 @@ local function formatDuration(sec)
   end
 end
 
--- (NUI/commands unchanged from your previous version)
+
 RegisterCommand('jailer', function()
   TriggerServerEvent('jail:checkPermission')
 end, false)
@@ -73,7 +74,9 @@ RegisterNUICallback('submitJail', function(data, cb)
   local targetId = tonumber(data.targetId)
   local jailTime = tonumber(data.time)
   local charges  = data.charges
-  TriggerServerEvent('jailer:requestJail', targetId, jailTime, charges)
+  local fine     = tonumber(data.fine) or 0
+  local notes    = tostring(data.notes or '')
+  TriggerServerEvent('jailer:requestJail', targetId, jailTime, charges, fine, notes)
   cb({ status = 'pending' })
 end)
 
@@ -99,7 +102,32 @@ AddEventHandler('jailer:returnCaseRecords', function(records)
   SendNUIMessage({ action = 'caseRecords', records = records })
 end)
 
--- Clothing helpers (unchanged)
+RegisterNUICallback('fetchDocket', function(_, cb)
+  TriggerServerEvent('jailer:requestCourtDocket')
+  cb({})
+end)
+
+RegisterNUICallback('payLawyer', function(data, cb)
+  TriggerServerEvent('jailer:requestLawyerPayment', tonumber(data.targetId))
+  cb({})
+end)
+
+RegisterNUICallback('courtAction', function(data, cb)
+  TriggerServerEvent('jailer:requestCourtAction', tonumber(data.caseId), data.action, data.payload or {})
+  cb({})
+end)
+
+RegisterNUICallback('unjailPlayer', function(data, cb)
+  TriggerServerEvent('jailer:requestUnjail', tonumber(data.targetId))
+  cb({})
+end)
+
+RegisterNetEvent('jailer:returnCourtDocket')
+AddEventHandler('jailer:returnCourtDocket', function(records)
+  SendNUIMessage({ action = 'courtDocket', records = records or {} })
+end)
+
+
 local function GetConvertedClothes(raw)
   local clothes    = {}
   local components = Config.Clothes and Config.Clothes.mapping and Config.Clothes.mapping.components or {}
@@ -153,6 +181,38 @@ local function RestoreOldClothes()
   end
 end
 
+RegisterNetEvent('jailer:updateSentence')
+AddEventHandler('jailer:updateSentence', function(seconds)
+  timeLeft = math.max(0, tonumber(seconds) or timeLeft)
+  lib.notify({
+    id = 'sentence_update',
+    title = 'Sentence Updated',
+    description = string.format('Your remaining sentence is %s.', formatDuration(timeLeft)),
+    type = 'inform',
+    position = 'top'
+  })
+end)
+
+RegisterNetEvent('jailer:releaseNow')
+AddEventHandler('jailer:releaseNow', function(reason)
+  jailed = false
+  timeLeft = 0
+  activeCaseId = nil
+  if jailZone then jailZone:remove() jailZone = nil end
+  DoScreenFadeOut(Config.Jail.fadeTime or 500)
+  Citizen.Wait(Config.Jail.fadeTime or 500)
+  SetEntityCoords(PlayerPedId(), table.unpack(releaseCoords))
+  RestoreOldClothes()
+  DoScreenFadeIn(Config.Jail.fadeTime or 500)
+  lib.notify({
+    id = 'court_release',
+    title = 'Release',
+    description = tostring(reason or Config.Jail.releaseMessage or 'You have been released.'),
+    type = 'success',
+    position = 'top'
+  })
+end)
+
 local function applyJailUniform()
   local ped = PlayerPedId()
   ClearAllPedProps(ped)
@@ -174,12 +234,12 @@ local function applyJailUniform()
   end
 end
 
--- Remove weapons
+
 local function RemoveWeapons()
   RemoveAllPedWeapons(PlayerPedId(), true)
 end
 
--- Penalty on damage
+
 AddEventHandler('gameEventTriggered', function(name, args)
   if name == "CEventNetworkEntityDamage" and jailed then
     if args[2] == PlayerPedId() then
@@ -195,7 +255,7 @@ AddEventHandler('gameEventTriggered', function(name, args)
   end
 end)
 
--- Timer display (unchanged)
+
 Citizen.CreateThread(function()
   while true do
     Citizen.Wait(0)
@@ -213,9 +273,9 @@ Citizen.CreateThread(function()
   end
 end)
 
--- ----------------------------
--- Helper functions
--- ----------------------------
+
+
+
 function DrawText3D(x,y,z, text)
   local onScreen, _x, _y = World3dToScreen2d(x, y, z)
   if onScreen then
@@ -239,10 +299,10 @@ local function RequestModelAsync(hash)
   return HasModelLoaded(hash)
 end
 
--- ----------------------------
--- Cleaning interaction (gardener/shovel scenario + robust looping fallback)
--- ----------------------------
--- Play a single fallback anim for a specified duration (ms). Returns dict, anim used or nil.
+
+
+
+
 local function playGardenerFallbackAnimOnce(ped, durationMs)
   local dicts = {
     "amb@world_human_gardener_plant@male@base",
@@ -257,7 +317,7 @@ local function playGardenerFallbackAnimOnce(ped, durationMs)
     while not HasAnimDictLoaded(dict) and GetGameTimer() < timeout do Citizen.Wait(10) end
     if HasAnimDictLoaded(dict) then
       for _, anim in ipairs(anims) do
-        -- duration in ms, flag 1 (loop while duration lasts)
+        
         TaskPlayAnim(ped, dict, anim, 8.0, -8.0, durationMs, 1, 0.0, false, false, false)
         return dict, anim
       end
@@ -266,7 +326,7 @@ local function playGardenerFallbackAnimOnce(ped, durationMs)
   return nil, nil
 end
 
--- Start cleaning (gardener scenario) -- robust animation + lib.progressBar
+
 local function StartCleaningTask()
   if not jailed or isCleaning then return end
   if (GetGameTimer() / 1000) - cleaningLastUsed < (Config.Jail.cleaningCooldown or 30) then
@@ -277,16 +337,16 @@ local function StartCleaningTask()
   isCleaning = true
   local ped = PlayerPedId()
 
-  -- unarm to reduce interruptions
+  
   SetCurrentPedWeapon(ped, GetHashKey("weapon_unarmed"), true)
 
   lib.notify({ title = "Cleaning", description = "You start pulling weeds with a shovel...", type = 'inform', position = 'top' })
 
-  -- We'll manage the anims ourselves and run a monitor while the progress bar runs
+  
   local cleaningActive = true
   local fallbackDict, fallbackAnim
 
-  -- Prepare fallback anim dicts (same list as before)
+  
   local dicts = {
     "amb@world_human_gardener_plant@male@base",
     "amb@world_human_gardener_plant@female@base",
@@ -294,12 +354,12 @@ local function StartCleaningTask()
   }
   local anims = { "work_base", "base", "idle_a" }
 
-  -- Try to start scenario first
+  
   TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
   Citizen.Wait(250)
   local usingScenario = (IsPedUsingScenario and IsPedUsingScenario(ped)) or false
 
-  -- If scenario didn't start, find a fallback anim and request its dict
+  
   if not usingScenario then
     for _, d in ipairs(dicts) do
       RequestAnimDict(d)
@@ -312,28 +372,28 @@ local function StartCleaningTask()
     end
     if fallbackDict then
       fallbackAnim = anims[1] or anims[2] or anims[3]
-      -- play an indefinite looping anim; we'll clear it when done
+      
       TaskPlayAnim(ped, fallbackDict, fallbackAnim, 8.0, -8.0, -1, 1, 0.0, false, false, false)
     end
   end
 
-  -- Animation monitor - keeps scenario/anim alive while cleaningActive
+  
   Citizen.CreateThread(function()
     while cleaningActive and jailed and isCleaning do
-      -- If scenario support exists, ensure it stays active
+      
       if IsPedUsingScenario and IsPedUsingScenario(ped) then
-        -- scenario active, nothing to do
+        
       else
-        -- ensure scenario is started where possible
+        
         if not usingScenario then
-          -- try re-starting the scenario briefly
+          
           TaskStartScenarioInPlace(ped, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
           Citizen.Wait(100)
           if IsPedUsingScenario and IsPedUsingScenario(ped) then
             usingScenario = true
-            -- clear fallback anim (TaskStartScenarioInPlace should override it)
+            
           else
-            -- ensure fallback anim still playing
+            
             if fallbackDict and fallbackAnim then
               if not IsEntityPlayingAnim(ped, fallbackDict, fallbackAnim, 3) then
                 TaskPlayAnim(ped, fallbackDict, fallbackAnim, 8.0, -8.0, -1, 1, 0.0, false, false, false)
@@ -343,18 +403,18 @@ local function StartCleaningTask()
         end
       end
 
-      -- keep player unarmed to avoid interruptions
+      
       SetCurrentPedWeapon(ped, GetHashKey("weapon_unarmed"), true)
 
       Citizen.Wait(250)
     end
   end)
 
-  -- Run the progress bar WITHOUT giving it an anim/scenario to avoid conflicting control.
+  
   local ok = false
   local success, perr = pcall(function()
     ok = lib.progressBar({
-      duration = 1500, -- 1.5s
+      duration = 1500, 
       label = "Pulling weeds...",
       useWhileDead = false,
       canCancel = true,
@@ -365,16 +425,16 @@ local function StartCleaningTask()
         sprint = true,
         mouse = true
       },
-      -- intentionally NOT passing anim/scenario so we manage anims ourselves
+      
     })
   end)
 
-  -- stop the monitor and cleanup animations/tasks
+  
   cleaningActive = false
-  Citizen.Wait(80) -- give monitor a tick to finish
+  Citizen.Wait(80) 
   ClearPedTasksImmediately(ped)
 
-  -- finalize flags / cooldown
+  
   isCleaning = false
   cleaningLastUsed = GetGameTimer() / 1000
 
@@ -384,9 +444,10 @@ local function StartCleaningTask()
   end
 
   if ok then
-    -- completed -> reduce between 5 and 10 seconds (random)
+    
     local reduction = math.random(5, 10)
     timeLeft = math.max(0, timeLeft - reduction)
+    if activeCaseId then TriggerServerEvent('jailer:updateRemaining', activeCaseId, timeLeft) end
     lib.notify({
       id = 'clean_reduce',
       title = 'Cleaning Complete',
@@ -395,7 +456,7 @@ local function StartCleaningTask()
       position = 'top'
     })
   else
-    -- cancelled by player
+    
     lib.notify({
       id = 'clean_cancel',
       title = 'Cleaning Cancelled',
@@ -406,7 +467,7 @@ local function StartCleaningTask()
   end
 end
 
--- create cleaning markers
+
 local function CreateCleaningMarkers()
   local markers = {}
   for _, off in ipairs(Config.Jail.cleaningSpots or {}) do
@@ -418,9 +479,9 @@ local function CreateCleaningMarkers()
   return markers
 end
 
--- ----------------------------
--- Safer Bus/Driver behavior (simplified, single longrange task)
--- ----------------------------
+
+
+
 local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
   local function normalizeCoord(t)
     if not t then return nil end
@@ -435,13 +496,13 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     return
   end
 
-  -- avoid accidental 0,0
+  
   if (math.abs(cfgDest.x) < 0.0001 and math.abs(cfgDest.y) < 0.0001) then
     if Config.Jail.debugZone then print(("[jail] destination is 0,0 -> aborting spawn (x=%.4f y=%.4f)"):format(cfgDest.x, cfgDest.y)) end
     return
   end
 
-  -- ensure ground z if not provided
+  
   if not cfgDest.z or math.abs(cfgDest.z) < 0.01 then
     for h = 0, 100 do
       local ok, z = GetGroundZFor_3dCoord(cfgDest.x, cfgDest.y, h + 0.0, 0)
@@ -456,7 +517,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
   local vehModel    = GetHashKey(Config.Jail.busModel or "pbus")
   local driverModel = GetHashKey(Config.Jail.busDriverModel or "s_m_m_prisguard_01")
 
-  -- waypoint & blip
+  
   SetNewWaypoint(cfgDest.x, cfgDest.y)
   local destBlip = AddBlipForCoord(cfgDest.x, cfgDest.y, cfgDest.z or 0.0)
   if destBlip then
@@ -466,11 +527,11 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     SetBlipRouteColour(destBlip, 3)
   end
 
-  -- request models
+  
   RequestModelAsync(vehModel)
   RequestModelAsync(driverModel)
 
-  -- spawn vehicle
+  
   local spawnZ = (spawnCoords.z or 0.0) + 0.8
   local bus = CreateVehicle(vehModel, spawnCoords.x, spawnCoords.y, spawnZ, spawnCoords.h or 0.0, true, false)
   if not DoesEntityExist(bus) then
@@ -485,7 +546,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
   SetVehicleEngineOn(bus, true, true, true)
   SetVehicleDoorsLocked(bus, 1)
 
-  -- spawn driver
+  
   local driver = CreatePedInsideVehicle(bus, 4, driverModel, -1, true, false)
   if not DoesEntityExist(driver) then
     if Config.Jail.debugZone then print("[jail] failed to create driver ped") end
@@ -498,7 +559,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
   SetPedKeepTask(driver, true)
   SetEntityAsMissionEntity(driver, true, true)
 
-  -- warp driver
+  
   TaskWarpPedIntoVehicle(driver, bus, -1)
   Citizen.Wait(200)
   if not IsPedInVehicle(driver, bus, true) then
@@ -506,14 +567,14 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     Citizen.Wait(200)
   end
 
-  -- driving params
+  
   local speed = Config.Jail.busDriveSpeed or 18.0
   pcall(function() SetDriverAbility(driver, 1.0) end)
   pcall(function() SetDriverAggressiveness(driver, 0.0) end)
   pcall(function() SetDriveTaskCruiseSpeed(driver, speed) end)
   pcall(function() SetDriveTaskDrivingStyle(driver, 786603) end)
 
-  -- bus blip
+  
   local busBlip = AddBlipForEntity(bus)
   if DoesBlipExist(busBlip) then
     SetBlipSprite(busBlip, 56)
@@ -522,7 +583,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     EndTextCommandSetBlipName(busBlip)
   end
 
-  -- warp player into passenger
+  
   local playerPed = PlayerPedId()
   Citizen.Wait(150)
   if DoesEntityExist(bus) then
@@ -530,18 +591,18 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     Citizen.Wait(150)
   end
 
-  -- fade in once seated (if still faded out)
+  
   if IsScreenFadedOut() then
     DoScreenFadeIn(Config.Jail.fadeTime or 500)
     Citizen.Wait(Config.Jail.fadeTime or 500)
   end
 
-  -- lock player controls while trip active
+  
   local tripActive = true
   Citizen.CreateThread(function()
     while tripActive and DoesEntityExist(bus) do
       Citizen.Wait(0)
-      DisableControlAction(0, 75, true) -- exit vehicle
+      DisableControlAction(0, 75, true) 
       DisableControlAction(0, 59, true)
       DisableControlAction(0, 60, true)
       DisableControlAction(0, 62, true)
@@ -552,13 +613,13 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     SetEntityInvincible(playerPed, false)
   end)
 
-  -- SINGLE longrange drive (simpler, less oscillation)
+  
   TaskVehicleDriveToCoordLongrange(driver, bus, cfgDest.x, cfgDest.y, cfgDest.z, speed, 786603, 1.0)
 
-  -- monitor progress until arrival or timeout
+  
   local arrived = false
   local startTick = GetGameTimer()
-  local overallTimeout = (Config.Jail.busOverallTimeoutMs and Config.Jail.busOverallTimeoutMs) or 150000 -- default 150s
+  local overallTimeout = (Config.Jail.busOverallTimeoutMs and Config.Jail.busOverallTimeoutMs) or 150000 
 
   while DoesEntityExist(bus) and not arrived and (GetGameTimer() - startTick) < overallTimeout do
     Citizen.Wait(800)
@@ -573,12 +634,12 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     end
   end
 
-  -- arrival handling
+  
   if arrived and DoesEntityExist(bus) then
     if destBlip then RemoveBlip(destBlip) end
     if DoesBlipExist(busBlip) then RemoveBlip(busBlip) end
 
-    -- stop & allow exit
+    
     SetVehicleForwardSpeed(bus, 0.0)
     SetVehicleBrakeLights(bus, true)
     SetVehicleEngineOn(bus, false, true, true)
@@ -592,37 +653,37 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
       if IsControlJustReleased(0, 23) then canLeave = true end
     end
 
-    -- unfreeze so player can leave
+    
     FreezeEntityPosition(bus, false)
     TaskLeaveVehicle(playerPed, bus, 0)
 
-    -- WAIT until the player is actually out of the vehicle before driver drives off
+    
     local waitStart = GetGameTimer()
-    local maxWait = 20000 -- 20s max wait to avoid stuck situations
+    local maxWait = 20000 
     while DoesEntityExist(bus) and IsPedInVehicle(playerPed, bus, true) and (GetGameTimer() - waitStart) < maxWait do
       Citizen.Wait(100)
     end
 
-    -- if player left vehicle: wait a short moment for them to get a bit clear, then allow driver to go
+    
     if not IsPedInVehicle(playerPed, bus, true) then
-      -- ensure player is at least a small distance from bus (so they don't get clipped by moving vehicle)
+      
       local px,py,pz = table.unpack(GetEntityCoords(playerPed, true))
       local bx,by,bz = table.unpack(GetEntityCoords(bus, true))
       local distAfterExit = #(vector3(px,py,pz) - vector3(bx,by,bz))
       local safeDelay = 600
       if distAfterExit < 3.0 then
-        Citizen.Wait(500) -- small buffer
+        Citizen.Wait(500) 
       else
         Citizen.Wait(safeDelay)
       end
 
       if DoesEntityExist(driver) then
         SetBlockingOfNonTemporaryEvents(driver, false)
-        -- driver wanders off / drives away
+        
         TaskVehicleDriveWander(driver, bus, speed, 786603)
       end
 
-      -- cleanup thread: remove ped/vehicle after a delay
+      
       Citizen.CreateThread(function()
         local t0 = GetGameTimer()
         while DoesEntityExist(bus) and (GetGameTimer() - t0) < 20000 do Citizen.Wait(500) end
@@ -630,7 +691,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
         if DoesEntityExist(bus) then SetEntityAsNoLongerNeeded(bus); DeleteVehicle(bus) end
       end)
     else
-      -- if still in vehicle after timeout, teleport player to dest as fallback
+      
       if Config.Jail.debugZone then print("[jail] player did not exit bus in time; teleporting player") end
       SetEntityCoords(playerPed, cfgDest.x + 1.0, cfgDest.y + 1.0, cfgDest.z or 0.0)
       if DoesEntityExist(driver) then SetBlockingOfNonTemporaryEvents(driver, false); TaskVehicleDriveWander(driver, bus, speed, 786603) end
@@ -643,7 +704,7 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     end
 
   else
-    -- failure fallback: clean up & teleport
+    
     if destBlip then RemoveBlip(destBlip) end
     if DoesBlipExist(busBlip) then RemoveBlip(busBlip) end
     if Config.Jail.debugZone then print("[jail] bus failed to reach destination in time; cleaning up and teleporting player") end
@@ -651,21 +712,22 @@ local function SpawnPrisonBusAndTakeTrip(spawnCoords, destCoords)
     if DoesEntityExist(driver) then SetEntityAsNoLongerNeeded(driver); DeleteEntity(driver) end
     if DoesEntityExist(bus) then SetEntityAsNoLongerNeeded(bus); DeleteVehicle(bus) end
 
-    lib.notify({ title = "Bus Error", description = "Transport failed — teleporting to release point.", type = 'error', position = 'top' })
+    lib.notify({ title = "Bus Error", description = "Transport failed - teleporting to release point.", type = 'error', position = 'top' })
     SetEntityCoords(PlayerPedId(), cfgDest.x, cfgDest.y, cfgDest.z)
   end
 
   tripActive = false
 end
 
--- ----------------------------
--- Perform Jail event (client)
--- ----------------------------
+
+
+
 RegisterNetEvent('jailer:performJail')
-AddEventHandler('jailer:performJail', function(minutes)
+AddEventHandler('jailer:performJail', function(minutes, caseId)
   if jailZone then jailZone:remove() jailZone = nil end
   jailed   = true
   timeLeft = minutes * 60
+  activeCaseId = tonumber(caseId)
 
   local ped = PlayerPedId()
   DoScreenFadeOut(Config.Jail.fadeTime or 500)
@@ -678,7 +740,7 @@ AddEventHandler('jailer:performJail', function(minutes)
 
   DoScreenFadeIn(Config.Jail.fadeTime or 500)
 
-  -- Sentenced banner (unchanged)
+  
   StartScreenEffect("DeathFailOut", 0, false)
   local scaleform = RequestScaleformMovie("MP_BIG_MESSAGE_FREEMODE")
   while not HasScaleformMovieLoaded(scaleform) do Citizen.Wait(0) end
@@ -708,7 +770,7 @@ AddEventHandler('jailer:performJail', function(minutes)
     position    = 'top'
   })
 
-  -- jail zone & escape
+  
   jailZone = lib.zones.box({
     coords = vector3(table.unpack(jailCoords)),
     size   = vector3(table.unpack(Config.Jail.zoneSize)),
@@ -727,10 +789,10 @@ AddEventHandler('jailer:performJail', function(minutes)
     debug = Config.Jail.debugZone,
   })
 
-  -- create cleaning markers
+  
   local cleaningMarkers = CreateCleaningMarkers()
 
-  -- Show cleaning prompt every frame (no blinking)
+  
   Citizen.CreateThread(function()
     while jailed do
       Citizen.Wait(0)
@@ -740,7 +802,7 @@ AddEventHandler('jailer:performJail', function(minutes)
         local dist = #(vector3(px,py,pz) - mpos)
         if dist < 10.0 then
           DrawText3D(mpos.x, mpos.y, mpos.z + 1.0, "[E] Pull Weeds")
-          if dist < 2.0 and IsControlJustReleased(0, 38) then -- E
+          if dist < 2.0 and IsControlJustReleased(0, 38) then 
             StartCleaningTask()
           end
         end
@@ -748,24 +810,31 @@ AddEventHandler('jailer:performJail', function(minutes)
     end
   end)
 
-  -- countdown & release
+  
   Citizen.CreateThread(function()
     while jailed and timeLeft > 0 do
       Citizen.Wait(1000)
       timeLeft = timeLeft - 1
+      if activeCaseId and timeLeft % 60 == 0 then
+        TriggerServerEvent('jailer:updateRemaining', activeCaseId, timeLeft)
+      end
     end
 
     jailed   = false
     timeLeft = 0
+    if activeCaseId then
+      TriggerServerEvent('jailer:updateRemaining', activeCaseId, 0)
+      activeCaseId = nil
+    end
     if jailZone then jailZone:remove() jailZone = nil end
 
-    -- Fade to black before moving player to spawn/releasing
+    
     DoScreenFadeOut(Config.Jail.fadeTime or 500)
     Citizen.Wait(Config.Jail.fadeTime or 500)
 
-    -- If useBus is false -> instant teleport release
+    
     if not Config.Jail.useBus then
-      -- simple teleport release
+      
       SetEntityCoords(PlayerPedId(), table.unpack(releaseCoords))
       DoScreenFadeIn(Config.Jail.fadeTime or 500)
       RestoreOldClothes()
@@ -780,7 +849,7 @@ AddEventHandler('jailer:performJail', function(minutes)
       return
     end
 
-    -- Otherwise spawn bus flow
+    
     local spawnBase = vector3(table.unpack(releaseCoords))
     local spawnOff  = Config.Jail.busSpawnOffset or { x = 0.0, y = 0.0, z = 0.0, h = 0.0 }
     local spawn = {
@@ -790,12 +859,12 @@ AddEventHandler('jailer:performJail', function(minutes)
       h = spawnOff.h or 0.0
     }
 
-    -- Use the config table directly — SpawnPrisonBusAndTakeTrip will normalize it
+    
     local dest = Config.Jail.busDestCoords
 
-    -- place player at spawn (screen is intentionally faded out)
+    
     SetEntityCoords(PlayerPedId(), spawn.x, spawn.y, spawn.z)
-    -- DO NOT fade in here; SpawnPrisonBusAndTakeTrip fades in after player is seated
+    
     RestoreOldClothes()
 
     lib.notify({ id = 'release_notice', title = 'Release', description = Config.Jail.releaseMessage or "You have been released.", type = 'success', position = 'top' })
@@ -808,12 +877,13 @@ AddEventHandler('jailer:performJail', function(minutes)
   end)
 end)
 
--- Emergency override command
+
 RegisterCommand('stopfade', function()
   local ped = PlayerPedId()
   if IsScreenFadedOut() then DoScreenFadeIn(100) end
   jailed   = false
   timeLeft = 0
+  activeCaseId = nil
   if jailZone then jailZone:remove() jailZone = nil end
   SetEntityCoords(ped, table.unpack(releaseCoords))
   RestoreOldClothes()
@@ -826,72 +896,5 @@ RegisterCommand('stopfade', function()
   })
 end, false)
 
--- client.lua
-local pending = {}
-
-RegisterNUICallback('browserFetch', function(data, cb)
-  if not data or type(data.url) ~= 'string' then
-    cb({ success = false, error = 'invalid_request' })
-    return
-  end
-  local requestId = tostring(math.random(1, 2147483647))
-  pending[requestId] = cb
-  TriggerServerEvent('jailer:browserFetch_request', requestId, data.url)
-end)
-
-RegisterNetEvent('jailer:browserFetch_result')
-AddEventHandler('jailer:browserFetch_result', function(requestId, resp)
-  local cb = pending[requestId]
-  if cb then
-    cb(resp)
-    pending[requestId] = nil
-  else
-    print('[jailer] No pending callback for requestId', requestId)
-  end
-end)
-
--- -------------------------------------------------
--- Jailer UI: E to open at configured xyzh stations
--- -------------------------------------------------
-CreateThread(function()
-    local stations = Config.Jail.jailerStations or {}
-
-    if #stations == 0 then
-        return
-    end
-
-    while true do
-        local sleep = 500
-        local ped   = PlayerPedId()
-        local pPos  = GetEntityCoords(ped)
-
-        for _, station in ipairs(stations) do
-            local pos = station.coords
-                or (station.x and vector3(station.x, station.y, station.z))
-            if pos then
-                local dist = #(pPos - pos)
-                local radius = station.radius or 2.0
-
-                if dist < 10.0 then
-                    sleep = 0
-                    if dist < radius then
-                        DrawText3D(pos.x, pos.y, pos.z + 1.0,
-                            string.format("[E] %s", station.label or "Open Jail UI"))
-
-                        if IsControlJustReleased(0, 38) then -- E
-                            -- Same permission check you use for /jailer
-                            TriggerServerEvent('jail:checkPermission')
-                        end
-                    end
-                end
-            end
-        end
-
-        Wait(sleep)
-    end
-end)
-
-
 
 return
-

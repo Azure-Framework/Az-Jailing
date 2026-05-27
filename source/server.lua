@@ -1,393 +1,349 @@
--- server.lua
--- Full server-side for the jail system: permission checks (Discord role), jail records, request handling, case records.
--- Make sure Config.Discord.guildId and Config.Discord.botToken and Config.Discord.allowedRoles exist in your config.
-
 local Config = Config or require('config')
-local json = json
 
--- Helper: get numeric discord id like "123456789012345678" from player source
-local function getDiscordIdFromSource(src)
+local function notify(src, title, message, kind)
+  TriggerClientEvent('ox_lib:notify', src, {
+    title = title or 'Jailer',
+    description = message or '',
+    type = kind or 'inform',
+    position = 'top'
+  })
+end
+
+local function getDiscordId(src)
   for _, id in ipairs(GetPlayerIdentifiers(src)) do
-    if id:match("^discord:%d+$") then
-      return id:sub(9)
-    end
+    if id:match("^discord:%d+$") then return id:sub(9) end
   end
   return nil
 end
 
--- Async check against Discord Guild API (server-side HTTP)
-local function hasPermission(src, cb)
-  local discordId = getDiscordIdFromSource(src)
-  if not discordId then
-    return cb(false)
-  end
-
-  local url = string.format(
-    "https://discord.com/api/guilds/%s/members/%s",
-    Config.Discord.guildId,
-    discordId
-  )
-
-  PerformHttpRequest(url,
-    function(status, body)
-      if status ~= 200 then
-        return cb(false)
-      end
-      local ok, data = pcall(json.decode, body)
-      if not ok or not data then return cb(false) end
-      for _, role in ipairs(data.roles or {}) do
-        if Config.Discord.allowedRoles and Config.Discord.allowedRoles[role] then
-          return cb(true)
-        end
-      end
-      cb(false)
-    end,
-    "GET", nil,
-    {
-      ["Authorization"]   = "Bot " .. Config.Discord.botToken,
-      ["Content-Type"]    = "application/json"
-    }
-  )
+local function getPlayerJob(src)
+  local ok, job = pcall(function()
+    if exports[Config.FrameworkResource] and exports[Config.FrameworkResource].getPlayerJob then
+      return exports[Config.FrameworkResource]:getPlayerJob(src)
+    end
+  end)
+  if not ok or job == nil then return 'civ' end
+  if type(job) == 'table' then job = job.name or job.job or job.id or job.label end
+  job = tostring(job or 'civ'):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  return job ~= '' and job or 'civ'
 end
 
--- Event the client calls to check jailer permission
-RegisterNetEvent('jail:checkPermission')
-AddEventHandler('jail:checkPermission', function()
-  local src = source
-  hasPermission(src, function(allowed)
-    TriggerClientEvent('jail:permissionResult', src, allowed)
-  end)
-end)
+local function hasAce(src, ace)
+  return src == 0 or (ace and ace ~= '' and IsPlayerAceAllowed(src, ace))
+end
 
--- Ensure jail_records table exists
+local function hasAccess(src, mode)
+  if hasAce(src, Config.Access.AdminAce) then return true end
+  if mode == 'court' and hasAce(src, Config.Access.CourtAce) then return true end
+  if mode ~= 'court' and hasAce(src, Config.Access.JailerAce) then return true end
+
+  local job = getPlayerJob(src)
+  if mode == 'court' then
+    return Config.Access.CourtJobs[job] == true or Config.Access.JailerJobs[job] == true
+  end
+  return Config.Access.JailerJobs[job] == true
+end
+
+local function playerName(src)
+  return GetPlayerName(src) or ('Player %s'):format(tostring(src))
+end
+
+local function normalizeCharges(charges)
+  if type(charges) == 'table' then
+    local out = {}
+    for _, charge in ipairs(charges) do
+      charge = tostring(charge or ''):gsub("^%s+", ""):gsub("%s+$", "")
+      if charge ~= '' then out[#out + 1] = charge end
+    end
+    return table.concat(out, ', ')
+  end
+  return tostring(charges or ''):sub(1, 2000)
+end
+
+local function targetInRange(src, targetId)
+  if src == 0 then return true end
+  if Config.Court.AllowRemoteAdmin and hasAce(src, Config.Access.AdminAce) then return true end
+  local ped = GetPlayerPed(src)
+  local targetPed = GetPlayerPed(targetId)
+  if ped == 0 or targetPed == 0 then return false end
+  local dist = #(GetEntityCoords(ped) - GetEntityCoords(targetPed))
+  return dist <= (Config.Court.InteractionDistance or 8.0)
+end
+
+local function addMoney(src, amount)
+  amount = math.floor(tonumber(amount) or 0)
+  if amount <= 0 then return false end
+
+  local fw = exports[Config.FrameworkResource]
+  if fw then
+    local ok = pcall(function()
+      if fw.addMoney then fw:addMoney(src, amount) return end
+      if fw.AddMoney then fw:AddMoney(src, amount) return end
+    end)
+    if ok then return true end
+  end
+
+  return false
+end
+
+local function onlineByDiscord(discordId)
+  if not discordId then return nil end
+  for _, id in ipairs(GetPlayers()) do
+    local src = tonumber(id)
+    if getDiscordId(src) == discordId then return src end
+  end
+  return nil
+end
+
+local function ensureColumn(name, ddl)
+  MySQL.query(('SHOW COLUMNS FROM jail_records LIKE ?'), { name }, function(rows)
+    if rows and rows[1] then return end
+    MySQL.update(('ALTER TABLE jail_records ADD COLUMN %s'):format(ddl), {})
+  end)
+end
+
 MySQL.ready(function()
-  MySQL.query('SHOW TABLES LIKE ?', {'jail_records'}, function(res)
-    if #res == 0 then
-      MySQL.execute([[
-        CREATE TABLE IF NOT EXISTS `jail_records` (
-          `id` INT NOT NULL AUTO_INCREMENT,
-          `jailer_discord` VARCHAR(50) NOT NULL,
-          `inmate_discord` VARCHAR(50) NOT NULL,
-          `time_minutes` INT NOT NULL,
-          `date` DATETIME NOT NULL,
-          `charges` TEXT NOT NULL,
-          PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-      ]], {}, function()
-        print('[jailer] Created jail_records table')
-      end)
-    else
-      print('[jailer] jail_records table exists')
-    end
+  MySQL.update([[
+    CREATE TABLE IF NOT EXISTS jail_records (
+      id INT NOT NULL AUTO_INCREMENT,
+      jailer_discord VARCHAR(64) NULL,
+      jailer_name VARCHAR(128) NULL,
+      inmate_discord VARCHAR(64) NULL,
+      inmate_name VARCHAR(128) NULL,
+      time_minutes INT NOT NULL DEFAULT 0,
+      remaining_seconds INT NOT NULL DEFAULT 0,
+      fine INT NOT NULL DEFAULT 0,
+      date DATETIME NOT NULL,
+      charges TEXT NULL,
+      notes TEXT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'active',
+      lawyer_discord VARCHAR(64) NULL,
+      lawyer_name VARCHAR(128) NULL,
+      updated_at DATETIME NULL,
+      PRIMARY KEY (id),
+      INDEX idx_inmate_discord (inmate_discord),
+      INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ]], {}, function()
+    ensureColumn('jailer_name', 'jailer_name VARCHAR(128) NULL')
+    ensureColumn('inmate_name', 'inmate_name VARCHAR(128) NULL')
+    ensureColumn('remaining_seconds', 'remaining_seconds INT NOT NULL DEFAULT 0')
+    ensureColumn('fine', 'fine INT NOT NULL DEFAULT 0')
+    ensureColumn('notes', 'notes TEXT NULL')
+    ensureColumn('status', "status VARCHAR(32) NOT NULL DEFAULT 'active'")
+    ensureColumn('lawyer_discord', 'lawyer_discord VARCHAR(64) NULL')
+    ensureColumn('lawyer_name', 'lawyer_name VARCHAR(128) NULL')
+    ensureColumn('updated_at', 'updated_at DATETIME NULL')
   end)
 end)
 
--- Helper: tries to extract Discord ID for any player index (for use when targetId provided)
-local function getDiscordIdFromPlayer(targetPlayerId)
-  -- targetPlayerId may be server ID
-  for _, id in ipairs(GetPlayerIdentifiers(targetPlayerId)) do
-    if id:match("^discord:%d+$") then
-      return id:sub(9)
-    end
-  end
-  return nil
-end
+RegisterNetEvent('jail:checkPermission', function()
+  TriggerClientEvent('jail:permissionResult', source, hasAccess(source, 'jailer'))
+end)
 
--- Jail request (called by client UI)
--- targetId (server id), jailTime (minutes), charges (string or table)
-RegisterNetEvent('jailer:requestJail')
-AddEventHandler('jailer:requestJail', function(targetId, jailTime, charges)
+RegisterNetEvent('jailer:requestJail', function(targetId, jailTime, charges, fine, notes)
   local src = source
+  if not hasAccess(src, 'jailer') then
+    TriggerClientEvent('jailer:jailResult', src, { success = false, message = 'You do not have jailer access.' })
+    return
+  end
 
-  -- Security: ensure inputs are sane
   targetId = tonumber(targetId)
-  jailTime = tonumber(jailTime) or 0
-  if not targetId or jailTime <= 0 then
-    return TriggerClientEvent('jailer:jailResult', src, {
-      success = false,
-      message = 'Invalid target or time.'
-    })
+  jailTime = math.floor(tonumber(jailTime) or 0)
+  fine = math.max(0, math.floor(tonumber(fine) or 0))
+  notes = tostring(notes or ''):sub(1, 2000)
+
+  if not targetId or not GetPlayerName(targetId) then
+    TriggerClientEvent('jailer:jailResult', src, { success = false, message = 'Target player is not online.' })
+    return
+  end
+  if jailTime < 1 or jailTime > (Config.Court.MaxSentenceMinutes or 720) then
+    TriggerClientEvent('jailer:jailResult', src, { success = false, message = 'Sentence time is outside the allowed range.' })
+    return
+  end
+  if fine > (Config.Court.MaxFine or 250000) then
+    TriggerClientEvent('jailer:jailResult', src, { success = false, message = 'Fine is above the configured limit.' })
+    return
+  end
+  if not targetInRange(src, targetId) then
+    TriggerClientEvent('jailer:jailResult', src, { success = false, message = 'Move closer to the target before sentencing.' })
+    return
   end
 
-  -- Retrieve Discord IDs for both players
-  local jailerD = getDiscordIdFromSource(src)
-  local inmateD = getDiscordIdFromPlayer(targetId)
-  if not jailerD or not inmateD then
-    return TriggerClientEvent('jailer:jailResult', src, {
-      success = false,
-      message = 'Could not resolve Discord IDs for one of the players.'
-    })
-  end
+  local jailerD = getDiscordId(src)
+  local inmateD = getDiscordId(targetId)
+  local chStr = normalizeCharges(charges)
+  if chStr == '' then chStr = 'Unlisted charge' end
 
-  local ts = os.date('%Y-%m-%d %H:%M:%S')
-
-  -- Normalize charges
-  local chStr = ""
-  if type(charges) == "table" then
-    chStr = table.concat(charges, ", ")
-  elseif type(charges) == "string" then
-    chStr = charges
-  else
-    chStr = ""
-  end
-
-  MySQL.execute([[
+  MySQL.insert([[
     INSERT INTO jail_records
-      (jailer_discord, inmate_discord, time_minutes, date, charges)
-    VALUES (?, ?, ?, ?, ?)
+      (jailer_discord, jailer_name, inmate_discord, inmate_name, time_minutes, remaining_seconds, fine, date, charges, notes, status, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, 'active', NOW())
   ]], {
     jailerD,
+    playerName(src),
     inmateD,
+    playerName(targetId),
     jailTime,
-    ts,
-    chStr
-  }, function()
-    -- perform jail on target
-    TriggerClientEvent('jailer:performJail', targetId, jailTime)
-
-    -- inform requester of success
-    TriggerClientEvent('jailer:jailResult', src, { success = true })
-
-    -- optional chat message back to requester
-    TriggerClientEvent('chat:addMessage', src, {
-      args = {
-        '^2System',
-        ('Player %d jailed %d min'):format(targetId, jailTime)
-      }
-    })
+    jailTime * 60,
+    fine,
+    chStr,
+    notes
+  }, function(caseId)
+    TriggerClientEvent('jailer:performJail', targetId, jailTime, caseId)
+    TriggerClientEvent('jailer:jailResult', src, { success = true, caseId = caseId })
+    notify(src, 'Sentence Filed', ('%s was sentenced for %d minutes.'):format(playerName(targetId), jailTime), 'success')
+    notify(targetId, 'Sentenced', ('You were sentenced for %d minutes.'):format(jailTime), 'inform')
   end)
 end)
 
--- Case records retrieval
-RegisterNetEvent('jailer:requestCaseRecords')
-AddEventHandler('jailer:requestCaseRecords', function(targetId)
+RegisterNetEvent('jailer:requestCaseRecords', function(targetId)
   local src = source
   targetId = tonumber(targetId)
-  if not targetId then
-    return TriggerClientEvent('chat:addMessage', src, {
-      args = {'^1System','Invalid ID.'}
-    })
+  if not targetId or not GetPlayerName(targetId) then
+    notify(src, 'Case Search', 'Player not found.', 'error')
+    return
   end
 
-  local inmateD = getDiscordIdFromPlayer(targetId)
-  if not inmateD then
-    return TriggerClientEvent('chat:addMessage', src, {
-      args = {'^1System','Player not found.'}
-    })
-  end
-
+  local inmateD = getDiscordId(targetId)
   MySQL.query([[
-    SELECT date, time_minutes, charges
+    SELECT id, date, jailer_name, inmate_name, time_minutes, remaining_seconds, fine, charges, notes, status, lawyer_name
     FROM jail_records
     WHERE inmate_discord = ?
     ORDER BY date DESC
+    LIMIT 25
   ]], { inmateD }, function(records)
-    TriggerClientEvent('jailer:returnCaseRecords', src, records)
+    TriggerClientEvent('jailer:returnCaseRecords', src, records or {})
   end)
 end)
--- server.lua
--- Usage: handles browser fetch requests from client NUI via bladder client callback flow
--- It will attempt direct PerformHttpRequest; on network failure (status==0) it will optionally
--- call an external render proxy (PUPPETEER) if configured.
 
--- Simple local config here; move to config.lua if you prefer.
-local Config = {
-  ALLOW_ALL = false, -- dangerous if true; dev only
-  ALLOWED_DOMAINS = { "duckduckgo.com", "example.com", "azurewebsites.xyz", "127.0.0.1", "localhost" },
-  JS_WHITELIST = { "my-internal-site.local", "localhost" }, -- hosts allowed to keep <script> tags (trusted)
-  RENDER_PROXY_URL = nil, -- e.g. "https://my-render-proxy.example.com/render" ; set to use fallback rendered snapshots
-  RENDER_PROXY_APIKEY = nil -- optional: set if your proxy requires an API key
-}
-
--- Helper: extract host from url
-local function extractHost(url)
-  if not url then return nil end
-  local s = tostring(url):gsub("^%s+", ""):gsub("%s+$", "")
-  local host = s:match('^%w+://([^/]+)') or s:match('^([^/]+)')
-  if not host then return nil end
-  host = host:match('@(.+)') or host
-  host = host:match('^([^:]+)') or host
-  if not host then return nil end
-  return host:lower()
-end
-
--- domain matching (supports plain pattern and wildcard like *.example.com)
-local function domainMatches(host, pattern)
-  if not host or not pattern then return false end
-  host = host:lower(); pattern = pattern:lower()
-  if pattern:sub(1,2) == "*." then
-    local base = pattern:sub(3)
-    if host == base then return true end
-    if host:sub(-#base) == base then
-      local idx = #host - #base
-      if idx == 0 then return true end
-      return host:sub(idx, idx) == '.'
-    end
-    return false
-  end
-  if host == pattern then return true end
-  if host:sub(-#pattern) == pattern then
-    local idx = #host - #pattern
-    if idx == 0 then return true end
-    return host:sub(idx, idx) == '.'
-  end
-  return false
-end
-
-local function isAllowedDomain(host)
-  if Config.ALLOW_ALL then return true end
-  if not host then return false end
-  for _, pat in ipairs(Config.ALLOWED_DOMAINS) do
-    if domainMatches(host, pat) then return true end
-  end
-  return false
-end
-
-local function hostInJsWhitelist(host)
-  if not host then return false end
-  for _, w in ipairs(Config.JS_WHITELIST) do
-    if host:find(w, 1, true) then return true end
-  end
-  return false
-end
-
--- Basic server-side sanitizer (still minimal — tighten as needed)
-local function sanitizeHtml(html, host)
-  if not html then return '' end
-  local out = html
-  -- if host is trusted to allow scripts we keep them (use with caution)
-  if not hostInJsWhitelist(host) then
-    out = out:gsub('<script[%s%S]-</script>', '')
-    out = out:gsub('%s(on[%w]+)%s*=%s*"[^"]*"', '')
-    out = out:gsub("%s(on[%w]+)%s*=%s*'[^']*'", '')
-  else
-    -- remove meta refresh and javascript: hrefs even for trusted hosts
-    out = out:gsub('<meta[^>]-http%-equiv%s*=%s*["\']?refresh["\']?[^>]->', '')
-  end
-  out = out:gsub('<meta[^>]-http%-equiv%s*=%s*["\']?refresh["\']?[^>]->', '')
-  out = out:gsub('href%s*=%s*["\']%s*javascript:[^"\']*["\']', 'href="#"')
-  return out
-end
-
--- Inject base tag to help resolve relative assets
-local function injectBase(html, baseUrl)
-  if not html then return html end
-  local lower = html:lower()
-  local headStart = lower:find('<head')
-  if headStart then
-    local openTagEnd = html:find('>', headStart)
-    if openTagEnd then
-      local baseTag = string.format('<base href="%s">', baseUrl)
-      local before = html:sub(1, openTagEnd)
-      local after = html:sub(openTagEnd + 1)
-      return before .. baseTag .. after
-    end
-  end
-  return '<base href="' .. baseUrl .. '">' .. html
-end
-
--- Call external render proxy (if configured). Proxy should accept POST { url } -> JSON { success, html, title, url }
-local function callRenderProxy(url, cb)
-  if not Config.RENDER_PROXY_URL then
-    cb(nil, 'no_render_proxy_configured')
-    return
-  end
-  local payload = json.encode({ url = url })
-  local headers = { ['Content-Type'] = 'application/json' }
-  if Config.RENDER_PROXY_APIKEY then headers['x-api-key'] = Config.RENDER_PROXY_APIKEY end
-
-  PerformHttpRequest(Config.RENDER_PROXY_URL, function(statusCode, responseText, headersResp)
-    if not statusCode or statusCode == 0 then
-      cb(nil, 'render_proxy_network_error')
-      return
-    end
-    if statusCode >= 200 and statusCode < 400 and responseText then
-      local ok, parsed = pcall(function() return json.decode(responseText) end)
-      if not ok or not parsed then
-        cb(nil, 'render_proxy_bad_response')
-        return
-      end
-      -- expected parsed = { success=true, html=..., title=..., url=... }
-      if not parsed.success then
-        cb(nil, parsed.error or 'render_proxy_error')
-        return
-      end
-      cb(parsed, nil)
-    else
-      cb(nil, 'render_proxy_http_'..tostring(statusCode))
-    end
-  end, 'POST', payload, headers)
-end
-
--- Main handler called by client via server event
-RegisterNetEvent('jailer:browserFetch_request')
-AddEventHandler('jailer:browserFetch_request', function(requestId, url)
+RegisterNetEvent('jailer:requestCourtDocket', function()
   local src = source
-  print(('[jailer] browserFetch_request from src=%s requestId=%s url=%s'):format(tostring(src), tostring(requestId), tostring(url)))
-
-  if not requestId or type(requestId) ~= 'string' then
-    TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error='invalid_request_id' })
-    return
-  end
-  if not url or type(url) ~= 'string' then
-    TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error='invalid_url' })
+  if not hasAccess(src, 'court') then
+    TriggerClientEvent('jailer:returnCourtDocket', src, {})
+    notify(src, 'Court', 'You do not have court access.', 'error')
     return
   end
 
-  local host = extractHost(url)
-  print(('[jailer] extracted host=%s'):format(tostring(host)))
-
-  if not host then
-    TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error='could_not_parse_host', url=url })
-    return
-  end
-
-  if not isAllowedDomain(host) then
-    print(('[jailer] domain not allowed: %s'):format(host))
-    TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error='domain_not_allowed', host = host, url = url })
-    return
-  end
-
-  -- try direct fetch first
-  PerformHttpRequest(url, function(statusCode, responseText, headers)
-    if statusCode and statusCode >= 200 and statusCode < 400 and responseText then
-      local sanitized = sanitizeHtml(responseText, host)
-      local finalHtml = injectBase(sanitized, url)
-      local title = finalHtml:match('<title[^>]*>([%s%S]-)</title>') or nil
-      TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=true, html=finalHtml, title=title, url=url, fromProxy=false })
-      return
-    end
-
-    -- non-success or network-level failure (status==0)
-    local code = tostring(statusCode or 'nil')
-    print(('[jailer] direct fetch failed status=%s host=%s requestId=%s src=%s'):format(code, host, requestId, tostring(src)))
-
-    -- if a render proxy is configured, try it now (Puppeteer rendering)
-    if Config.RENDER_PROXY_URL then
-      print('[jailer] attempting render proxy fallback for url='..tostring(url))
-      callRenderProxy(url, function(proxyResp, proxyErr)
-        if proxyErr then
-          print(('[jailer] render proxy failed: %s'):format(tostring(proxyErr)))
-          TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error = 'http_error_'..tostring(statusCode), url=url })
-          return
-        end
-        -- proxyResp expected to include html/title/url
-        local finalHtml = proxyResp.html or ''
-        -- server trusts the proxy snapshot, but we still inject base for assets
-        finalHtml = injectBase(finalHtml, url)
-        local title = proxyResp.title or finalHtml:match('<title[^>]*>([%s%S]-)</title>') or nil
-        TriggerClientEvent('jailer:browserFetch_result', src, requestId, {
-          success = true,
-          html = finalHtml,
-          title = title,
-          url = proxyResp.url or url,
-          fromProxy = true
-        })
-      end)
-      return
-    end
-
-    -- no proxy configured -> return the http error back to client
-    TriggerClientEvent('jailer:browserFetch_result', src, requestId, { success=false, error='http_error_'..tostring(statusCode or 0), url=url })
-  end, 'GET', '', { ['User-Agent'] = 'FiveM-NUI-Browser/1.0' })
+  MySQL.query([[
+    SELECT id, date, jailer_name, inmate_name, inmate_discord, time_minutes, remaining_seconds, fine, charges, notes, status, lawyer_name
+    FROM jail_records
+    WHERE status IN ('active', 'reduced', 'review')
+    ORDER BY date DESC
+    LIMIT 50
+  ]], {}, function(records)
+    TriggerClientEvent('jailer:returnCourtDocket', src, records or {})
+  end)
 end)
+
+RegisterNetEvent('jailer:requestLawyerPayment', function(targetId)
+  local src = source
+  if not hasAccess(src, 'court') then return notify(src, 'Court', 'You do not have court access.', 'error') end
+  targetId = tonumber(targetId)
+  if not targetId or not GetPlayerName(targetId) then return notify(src, 'Court', 'Lawyer is not online.', 'error') end
+
+  local job = getPlayerJob(targetId)
+  if not Config.Access.CourtJobs[job] then
+    return notify(src, 'Court', 'That player is not registered as a lawyer/court employee.', 'error')
+  end
+
+  local amount = Config.Court.LawyerPayment or 500
+  if addMoney(targetId, amount) then
+    notify(src, 'Court', ('Paid %s $%d.'):format(playerName(targetId), amount), 'success')
+    notify(targetId, 'Court Payment', ('You received $%d for legal work.'):format(amount), 'success')
+  else
+    notify(src, 'Court', 'Could not pay through the configured framework export.', 'error')
+  end
+end)
+
+RegisterNetEvent('jailer:requestCourtAction', function(caseId, action, payload)
+  local src = source
+  if not hasAccess(src, 'court') then return notify(src, 'Court', 'You do not have court access.', 'error') end
+  caseId = tonumber(caseId)
+  payload = type(payload) == 'table' and payload or {}
+  if not caseId then return notify(src, 'Court', 'Invalid case ID.', 'error') end
+
+  MySQL.single('SELECT * FROM jail_records WHERE id = ?', { caseId }, function(row)
+    if not row then return notify(src, 'Court', 'Case not found.', 'error') end
+
+    local target = onlineByDiscord(row.inmate_discord)
+    if action == 'release' then
+      MySQL.update("UPDATE jail_records SET status = 'released', remaining_seconds = 0, updated_at = NOW() WHERE id = ?", { caseId })
+      if target then TriggerClientEvent('jailer:releaseNow', target, 'Court release') end
+      notify(src, 'Court', 'Case released.', 'success')
+    elseif action == 'reduce' then
+      local reduction = math.max(1, math.floor(tonumber(payload.minutes) or 0)) * 60
+      local remaining = math.max(0, (tonumber(row.remaining_seconds) or 0) - reduction)
+      local status = remaining == 0 and 'released' or 'reduced'
+      MySQL.update("UPDATE jail_records SET status = ?, remaining_seconds = ?, updated_at = NOW() WHERE id = ?", { status, remaining, caseId })
+      if target then
+        if remaining == 0 then TriggerClientEvent('jailer:releaseNow', target, 'Sentence reduced') else TriggerClientEvent('jailer:updateSentence', target, remaining) end
+      end
+      notify(src, 'Court', ('Sentence reduced by %d minutes.'):format(math.floor(reduction / 60)), 'success')
+    elseif action == 'assign_lawyer' then
+      local lawyerId = tonumber(payload.lawyerId)
+      if not lawyerId or not GetPlayerName(lawyerId) then return notify(src, 'Court', 'Lawyer is not online.', 'error') end
+      MySQL.update("UPDATE jail_records SET status = 'review', lawyer_discord = ?, lawyer_name = ?, updated_at = NOW() WHERE id = ?", {
+        getDiscordId(lawyerId),
+        playerName(lawyerId),
+        caseId
+      })
+      notify(src, 'Court', ('Assigned %s to case #%d.'):format(playerName(lawyerId), caseId), 'success')
+      notify(lawyerId, 'Court Case', ('You were assigned to case #%d.'):format(caseId), 'inform')
+    else
+      notify(src, 'Court', 'Unknown court action.', 'error')
+    end
+  end)
+end)
+
+RegisterNetEvent('jailer:requestUnjail', function(targetId)
+  local src = source
+  if not hasAccess(src, 'court') then return notify(src, 'Court', 'You do not have court access.', 'error') end
+  targetId = tonumber(targetId)
+  if not targetId or not GetPlayerName(targetId) then return notify(src, 'Court', 'Player is not online.', 'error') end
+  local discordId = getDiscordId(targetId)
+  MySQL.update("UPDATE jail_records SET status = 'released', remaining_seconds = 0, updated_at = NOW() WHERE inmate_discord = ? AND status IN ('active', 'reduced', 'review')", { discordId })
+  TriggerClientEvent('jailer:releaseNow', targetId, 'Manual release')
+  notify(src, 'Court', ('Released %s.'):format(playerName(targetId)), 'success')
+end)
+
+RegisterNetEvent('jailer:updateRemaining', function(caseId, remaining)
+  local src = source
+  caseId = tonumber(caseId)
+  remaining = math.max(0, math.floor(tonumber(remaining) or 0))
+  if not caseId then return end
+
+  local discordId = getDiscordId(src)
+  MySQL.update([[
+    UPDATE jail_records
+    SET remaining_seconds = ?, status = IF(? = 0, 'released', status), updated_at = NOW()
+    WHERE id = ? AND inmate_discord = ?
+  ]], { remaining, remaining, caseId, discordId })
+end)
+
+RegisterCommand('paylawyer', function(source, args)
+  local src = source
+  if not hasAccess(src, 'court') then return notify(src, 'Court', 'You do not have court access.', 'error') end
+  local targetId = tonumber(args[1])
+  if not targetId or not GetPlayerName(targetId) then return notify(src, 'Court', 'Lawyer is not online.', 'error') end
+  local job = getPlayerJob(targetId)
+  if not Config.Access.CourtJobs[job] then return notify(src, 'Court', 'That player is not registered as a lawyer/court employee.', 'error') end
+  local amount = Config.Court.LawyerPayment or 500
+  if addMoney(targetId, amount) then
+    notify(src, 'Court', ('Paid %s $%d.'):format(playerName(targetId), amount), 'success')
+    notify(targetId, 'Court Payment', ('You received $%d for legal work.'):format(amount), 'success')
+  else
+    notify(src, 'Court', 'Could not pay through the configured framework export.', 'error')
+  end
+end, false)
+
+RegisterCommand('unjail', function(source, args)
+  local src = source
+  if not hasAccess(src, 'court') then return notify(src, 'Court', 'You do not have court access.', 'error') end
+  local targetId = tonumber(args[1])
+  if not targetId or not GetPlayerName(targetId) then return notify(src, 'Court', 'Player is not online.', 'error') end
+  local discordId = getDiscordId(targetId)
+  MySQL.update("UPDATE jail_records SET status = 'released', remaining_seconds = 0, updated_at = NOW() WHERE inmate_discord = ? AND status IN ('active', 'reduced', 'review')", { discordId })
+  TriggerClientEvent('jailer:releaseNow', targetId, 'Manual release')
+  notify(src, 'Court', ('Released %s.'):format(playerName(targetId)), 'success')
+end, false)
